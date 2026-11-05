@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Song } from '@/types/velo';
 import { searchSongs, TRENDING_CATALOG_SONGS } from '@/lib/itunesApi';
+import { AudioTrimmerModal } from './AudioTrimmerModal';
 import {
   Music,
   Search,
@@ -33,6 +34,7 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
   const [catalogSongs, setCatalogSongs] = useState<Song[]>(TRENDING_CATALOG_SONGS);
   const [searching, setSearching] = useState(false);
   const [previewingSongId, setPreviewingSongId] = useState<string | null>(null);
+  const [trimmingSong, setTrimmingSong] = useState<Song | null>(null);
 
   // Custom MP3 trimmer states
   const [customAudioUrl, setCustomAudioUrl] = useState<string | null>(null);
@@ -164,8 +166,7 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
       duration: trimDuration,
     };
 
-    onSelectSong(newSong);
-    onClose();
+    setTrimmingSong(newSong);
   };
 
   if (!isOpen) return null;
@@ -283,8 +284,7 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          onSelectSong(song);
-                          onClose();
+                          setTrimmingSong(song);
                         }}
                         className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all ${isSelected
                             ? 'bg-zinc-900 text-white dark:bg-white dark:text-black'
@@ -418,6 +418,19 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
               </div>
             )}
           </div>
+        )}
+        {/* Trimmer Modal */}
+        {trimmingSong && (
+          <AudioTrimmerModal
+            isOpen={Boolean(trimmingSong)}
+            song={trimmingSong}
+            onClose={() => setTrimmingSong(null)}
+            onConfirm={(finalTrimmed) => {
+              onSelectSong(finalTrimmed);
+              setTrimmingSong(null);
+              onClose();
+            }}
+          />
         )}
       </div>
     </div>

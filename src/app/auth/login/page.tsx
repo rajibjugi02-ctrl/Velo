@@ -18,7 +18,7 @@ function LoginContent() {
   const { currentUser, isHydrated, allUsers, login, addAccount, showToast } = useVelo();
 
   const [usernameOrEmail, setUsernameOrEmail] = useState(prefillUsername);
-  const [password, setPassword] = useState('demo1234');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   // Jika sudah login dan bukan sedang switch account, langsung bawa ke profil akunnya
@@ -126,7 +126,7 @@ function LoginContent() {
               type="text"
               value={usernameOrEmail}
               onChange={(e) => setUsernameOrEmail(e.target.value)}
-              placeholder="alex_chen or alex@velo.app"
+              placeholder="Username or email"
               className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-100/80 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 text-xs sm:text-sm focus:outline-none focus:border-zinc-400 dark:focus:border-white/30 transition-all"
               required
             />
@@ -159,44 +159,6 @@ function LoginContent() {
           <ArrowRight className="w-4 h-4" />
         </button>
       </form>
-
-      <div className="mt-5 p-3.5 rounded-2xl bg-zinc-50 dark:bg-white/5 border border-zinc-200 dark:border-white/10">
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-semibold mb-2">
-          Quick 1-Click Demo Profiles:
-        </p>
-        <div className="flex gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => {
-              setUsernameOrEmail('alex_chen');
-              setPassword('demo1234');
-            }}
-            className="px-2.5 py-1 rounded-lg bg-zinc-200/80 hover:bg-zinc-300/80 text-zinc-800 dark:bg-white/10 dark:hover:bg-white/20 dark:text-zinc-200 text-xs font-medium transition-colors"
-          >
-            @alex_chen
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setUsernameOrEmail('elena_rostova');
-              setPassword('demo1234');
-            }}
-            className="px-2.5 py-1 rounded-lg bg-zinc-200/80 hover:bg-zinc-300/80 text-zinc-800 dark:bg-white/10 dark:hover:bg-white/20 dark:text-zinc-200 text-xs font-medium transition-colors"
-          >
-            @elena_rostova
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setUsernameOrEmail('marcus_v');
-              setPassword('demo1234');
-            }}
-            className="px-2.5 py-1 rounded-lg bg-zinc-200/80 hover:bg-zinc-300/80 text-zinc-800 dark:bg-white/10 dark:hover:bg-white/20 dark:text-zinc-200 text-xs font-medium transition-colors"
-          >
-            @marcus_v
-          </button>
-        </div>
-      </div>
 
       <div className="text-center mt-5 pt-4 border-t border-zinc-200 dark:border-white/10">
         <p className="text-xs text-zinc-500 dark:text-zinc-400">

@@ -121,18 +121,20 @@ export default function StoryViewerPage() {
     }
   }, [currentStory?.mediaUrl, currentStory?.mediaType]);
 
-  // Record view on story
+  // Record view on story (Rule 7: Author must never view their own story)
   useEffect(() => {
-    if (currentStory && currentUser) {
+    if (currentStory && currentUser && currentStory.authorId !== currentUser.id) {
       viewStory(currentStory.id);
     }
   }, [currentStory?.id, currentUser?.id]);
 
-  // Audio preview playback
+  // Audio preview playback with starting offset
   useEffect(() => {
     if (currentStory?.song?.previewUrl) {
       const audio = new Audio(currentStory.song.previewUrl);
-      audio.loop = true;
+      const songStart = currentStory.song.startTime || 0;
+      audio.currentTime = songStart;
+      audio.loop = false;
       audio.muted = isMuted;
       audioRef.current = audio;
 
@@ -146,7 +148,7 @@ export default function StoryViewerPage() {
         audioRef.current = null;
       };
     }
-  }, [currentGroupIdx, currentStoryIdx, currentStory?.song?.previewUrl, isMuted]);
+  }, [currentGroupIdx, currentStoryIdx, currentStory?.song?.previewUrl]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -206,20 +208,40 @@ export default function StoryViewerPage() {
     }
   };
 
-  // Auto advance timer (paused whenever viewersDrawerOpen is true)
+  // Rule 3: Dynamic progress bar (Photo 10s, Song duration for music, Video duration for video)
   useEffect(() => {
     if (isPaused || viewersDrawerOpen || !currentStory) return;
 
-    const DURATION = 6000;
-    const INTERVAL = 50;
+    let targetDuration = 10000; // Standard 10 seconds for plain photo
+    if (currentStory.song) {
+      targetDuration = (currentStory.song.duration || 15) * 1000;
+    } else if (currentStory.mediaType === 'video') {
+      targetDuration = 15000;
+    }
+
+    const songStart = currentStory.song?.startTime || 0;
+    const INTERVAL = 40;
 
     const timer = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 100) {
+        // If audio track is playing, sync progress bar with audio currentTime
+        if (audioRef.current && !audioRef.current.paused && audioRef.current.duration) {
+          const elapsed = Math.max(0, audioRef.current.currentTime - songStart);
+          const p = Math.min(100, (elapsed / (currentStory.song?.duration || 15)) * 100);
+          if (p >= 100 || elapsed >= (currentStory.song?.duration || 15)) {
+            handleNextStory();
+            return 0;
+          }
+          return p;
+        }
+
+        // Standard smooth clock progression
+        const next = prev + (INTERVAL / targetDuration) * 100;
+        if (next >= 100) {
           handleNextStory();
           return 0;
         }
-        return prev + (INTERVAL / DURATION) * 100;
+        return next;
       });
     }, INTERVAL);
 
@@ -243,7 +265,12 @@ export default function StoryViewerPage() {
   const isOwner = currentUser?.id === currentStory.authorId;
   const textOverlay = currentStory.textOverlay;
 
-  const filteredViewers = currentStory.viewers.filter(
+  // Rule 7: Exclude the story author themselves from viewers list
+  const genuineViewers = currentStory.viewers.filter(
+    (v) => v.user.id !== currentStory.authorId
+  );
+
+  const filteredViewers = genuineViewers.filter(
     (v) =>
       v.user.fullName.toLowerCase().includes(viewerSearch.toLowerCase()) ||
       v.user.username.toLowerCase().includes(viewerSearch.toLowerCase())
@@ -271,8 +298,8 @@ export default function StoryViewerPage() {
         </button>
       )}
 
-      {/* Main Story Container */}
-      <div className="relative w-full max-w-sm sm:max-w-md h-full md:max-h-[92vh] md:rounded-[36px] overflow-hidden bg-zinc-950 flex flex-col justify-between shadow-2xl border border-white/10 transition-all duration-300">
+      {/* Main Story Container: Responsive full screen on mobile (100dvh) and centered card on desktop */}
+      <div className="relative w-full h-[100dvh] md:max-w-md md:h-[92vh] md:rounded-[36px] overflow-hidden bg-zinc-950 flex flex-col justify-between shadow-2xl border-0 md:border md:border-white/10 transition-all duration-300">
         {/* Ambient Blurred Backdrop for Landscape Media */}
         {isCurrentMediaLandscape && (
           <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40 blur-2xl scale-125">
@@ -324,7 +351,7 @@ export default function StoryViewerPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/70 pointer-events-none" />
 
         {/* Top Header & Progress Bars */}
-        <div className="relative z-20 p-4 flex flex-col gap-3">
+        <div className="relative z-20 p-4 pt-safe sm:p-5 flex flex-col gap-3">
           {/* Progress Bars: Strictly scoped to current author's stories only */}
           <div className="flex items-center gap-1.5 w-full">
             {currentGroup.stories.map((story, idx) => {
@@ -503,7 +530,7 @@ export default function StoryViewerPage() {
               <div className="flex items-center gap-2">
                 <Eye className="w-4 h-4 text-white" />
                 <span className="text-xs font-semibold">
-                  {currentStory.viewers.length} Viewers
+                  {genuineViewers.length} Viewers
                 </span>
               </div>
               <span className="text-[11px] text-zinc-300">
@@ -525,7 +552,7 @@ export default function StoryViewerPage() {
               <div className="flex items-center gap-2">
                 <Eye className="w-4 h-4 text-white" />
                 <h3 className="text-sm font-bold text-white">
-                  Story Viewers ({currentStory.viewers.length})
+                  Story Viewers ({genuineViewers.length})
                 </h3>
               </div>
               <button

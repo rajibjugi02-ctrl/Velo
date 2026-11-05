@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useVelo } from '@/context/VeloContext';
 import { fileToBase64 } from '@/lib/utils';
-import { compressImage, saveMediaBlob } from '@/lib/mediaStorage';
+import { compressImage, saveMediaBlob, getMediaBlob } from '@/lib/mediaStorage';
 import { VideoPlayer } from '@/components/common/VideoPlayer';
 import {
   ArrowLeft,
@@ -27,6 +27,26 @@ export default function EditProfilePage() {
   const [bannerType, setBannerType] = useState<'image' | 'video'>(
     currentUser?.bannerType || 'image'
   );
+  const [bannerPreviewUrl, setBannerPreviewUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (currentUser?.bannerType === 'video' && currentUser?.banner) {
+      if (currentUser.banner.startsWith('http') || currentUser.banner.startsWith('data:')) {
+        setBannerPreviewUrl(currentUser.banner);
+      } else {
+        const idbKey = currentUser.banner.startsWith('idb:')
+          ? currentUser.banner.replace('idb:', '')
+          : `user_banner_video_${currentUser.id}`;
+        getMediaBlob(idbKey).then((blob) => {
+          if (blob && blob instanceof Blob) {
+            setBannerPreviewUrl(URL.createObjectURL(blob));
+          } else if (typeof blob === 'string') {
+            setBannerPreviewUrl(blob);
+          }
+        });
+      }
+    }
+  }, [currentUser?.id, currentUser?.banner, currentUser?.bannerType]);
 
   // 3 distinct link input states
   const [link1Label, setLink1Label] = useState(currentUser?.links?.[0]?.label || 'Portfolio / Work');
@@ -60,14 +80,16 @@ export default function EditProfilePage() {
     try {
       const isVideo = file.type.startsWith('video');
       if (isVideo) {
-        const videoKey = `banner_vid_${Date.now()}`;
+        const videoKey = `user_banner_video_${currentUser?.id || Date.now()}`;
         await saveMediaBlob(videoKey, file);
         const objUrl = URL.createObjectURL(file);
-        setBanner(objUrl);
+        setBanner(`idb:${videoKey}`);
+        setBannerPreviewUrl(objUrl);
         setBannerType('video');
       } else {
         const compressed = await compressImage(file, 1200, 675, 0.82);
         setBanner(compressed);
+        setBannerPreviewUrl(compressed);
         setBannerType('image');
       }
     } catch {
@@ -149,7 +171,7 @@ export default function EditProfilePage() {
           <div className="relative h-44 sm:h-52 w-full bg-zinc-100 dark:bg-zinc-900 overflow-hidden">
             {bannerType === 'video' ? (
               <VideoPlayer
-                src={banner}
+                src={bannerPreviewUrl || banner}
                 className="w-full h-full object-cover"
                 autoPlay={true}
                 loop={true}
@@ -158,7 +180,7 @@ export default function EditProfilePage() {
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={banner}
+                src={bannerPreviewUrl || banner}
                 alt="Banner preview"
                 className="w-full h-full object-cover"
               />

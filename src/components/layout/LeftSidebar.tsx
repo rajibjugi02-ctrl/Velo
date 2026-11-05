@@ -45,11 +45,12 @@ export const LeftSidebar: React.FC = () => {
   const unreadMessagesCount = conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
   const unreadActivitiesCount = activities.filter((a) => !a.isRead).length;
 
-  // Filter out dummy placeholder accounts (usr_me, usr_marcus, usr_elena) if active user is a real user
-  const isRealUser = currentUser && currentUser.id !== 'usr_me';
-  const displayedAccounts = isRealUser
-    ? savedAccounts.filter((acc) => acc.id !== 'usr_me' && acc.id !== 'usr_marcus' && acc.id !== 'usr_elena')
-    : savedAccounts;
+  // Filter out any dummy accounts (Alex, Elena, Marcus, etc.) from switcher
+  const dummyIds = new Set(['usr_me', 'usr_marcus', 'usr_elena', 'usr_sarah', 'usr_kai', 'usr_jordan']);
+  const dummyNames = new Set(['alex_chen', 'marcus_v', 'elena_rostova', 'sarah_k', 'kai_zen', 'jordan_google']);
+  const displayedAccounts = savedAccounts.filter(
+    (acc) => !dummyIds.has(acc.id) && !dummyNames.has(acc.username?.toLowerCase())
+  );
 
   const navLinks = [
     { href: '/feed', label: t('home'), icon: Home },

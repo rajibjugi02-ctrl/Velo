@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useVelo } from '@/context/VeloContext';
@@ -8,6 +8,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { PostCard } from '@/components/feed/PostCard';
 import { VideoPlayer } from '@/components/common/VideoPlayer';
 import { formatJoinedDate, generateInitialsAvatar } from '@/lib/utils';
+import { getMediaBlob } from '@/lib/mediaStorage';
 import {
   ArrowLeft,
   Link as LinkIcon,
@@ -28,6 +29,7 @@ export default function UserProfilePage() {
   const { t } = useLanguage();
 
   const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'media' | 'links'>('posts');
+  const [resolvedVideoBanner, setResolvedVideoBanner] = useState<string | null>(null);
 
   const decodedUsername = (username ? decodeURIComponent(username) : '').toLowerCase();
 
@@ -54,6 +56,33 @@ export default function UserProfilePage() {
       } catch { }
     }
   }
+
+  // Rule 6: Rehydrate video banner from IndexedDB Blob across page reloads
+  useEffect(() => {
+    let activeBlobUrl = '';
+    if (profileUser?.bannerType === 'video' && profileUser?.banner) {
+      if (profileUser.banner.startsWith('http') || profileUser.banner.startsWith('data:')) {
+        setResolvedVideoBanner(profileUser.banner);
+      } else {
+        const idbKey = profileUser.banner.startsWith('idb:')
+          ? profileUser.banner.replace('idb:', '')
+          : `user_banner_video_${profileUser.id}`;
+
+        getMediaBlob(idbKey).then((blob) => {
+          if (blob && blob instanceof Blob) {
+            activeBlobUrl = URL.createObjectURL(blob);
+            setResolvedVideoBanner(activeBlobUrl);
+          } else if (typeof blob === 'string') {
+            setResolvedVideoBanner(blob);
+          }
+        });
+      }
+    }
+
+    return () => {
+      if (activeBlobUrl) URL.revokeObjectURL(activeBlobUrl);
+    };
+  }, [profileUser?.id, profileUser?.banner, profileUser?.bannerType]);
 
   if (!isHydrated) {
     return (
@@ -122,7 +151,7 @@ export default function UserProfilePage() {
         {profileUser.banner ? (
           profileUser.bannerType === 'video' ? (
             <VideoPlayer
-              src={profileUser.banner}
+              src={resolvedVideoBanner || profileUser.banner}
               className="w-full h-full object-cover"
               autoPlay={true}
               loop={true}

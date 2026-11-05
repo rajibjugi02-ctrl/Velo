@@ -12,11 +12,9 @@ export default function SwitchAccountsPage() {
   const { currentUser, savedAccounts, switchAccount, removeAccount } = useVelo();
   const { t } = useLanguage();
 
-  // Purge any sample/mock dummy accounts (usr_me, usr_marcus, usr_elena) if user is genuine
-  const isRealUser = currentUser && currentUser.id !== 'usr_me';
-  const displayedAccounts = isRealUser
-    ? savedAccounts.filter((acc) => acc.id !== 'usr_me' && acc.id !== 'usr_marcus' && acc.id !== 'usr_elena')
-    : savedAccounts;
+  // Filter out any dummy mock accounts permanently
+  const DUMMY_SET = new Set(['usr_me', 'usr_elena', 'usr_marcus', 'usr_sarah', 'usr_kai', 'usr_jordan']);
+  const displayedAccounts = savedAccounts.filter((acc) => !DUMMY_SET.has(acc.id));
 
   return (
     <div className="w-full max-w-4xl xl:max-w-5xl mx-auto px-4 sm:px-8 py-8">

@@ -75,57 +75,59 @@ export const RightPanel: React.FC = () => {
       </div>
 
       {/* Who to Follow Card */}
-      <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/[0.06]">
-        <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider mb-3 px-1">
-          {t('who_to_follow')}
-        </h3>
-        <div className="flex flex-col gap-3">
-          {suggestedUsers.map((user) => (
-            <div key={user.id} className="flex items-center justify-between gap-2 p-1">
-              <Link
-                href={`/profile/${user.username}`}
-                className="flex items-center gap-2.5 min-w-0 group"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={user.avatar}
-                  alt={user.username}
-                  className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-white/10"
-                />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 group-hover:underline truncate leading-tight">
-                    {user.fullName}
-                  </p>
-                  <p className="text-[11px] text-zinc-500 truncate">
-                    @{user.username}
-                  </p>
-                </div>
-              </Link>
+      {suggestedUsers.length > 0 && (
+        <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/[0.06]">
+          <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider mb-3 px-1">
+            {t('who_to_follow')}
+          </h3>
+          <div className="flex flex-col gap-3">
+            {suggestedUsers.map((user) => (
+              <div key={user.id} className="flex items-center justify-between gap-2 p-1">
+                <Link
+                  href={`/profile/${user.username}`}
+                  className="flex items-center gap-2.5 min-w-0 group"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={user.avatar}
+                    alt={user.username}
+                    className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-white/10"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 group-hover:underline truncate leading-tight">
+                      {user.fullName}
+                    </p>
+                    <p className="text-[11px] text-zinc-500 truncate">
+                      @{user.username}
+                    </p>
+                  </div>
+                </Link>
 
-              <button
-                onClick={() => toggleFollowUser(user.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 shrink-0 ${
-                  user.isFollowing
-                    ? 'border border-zinc-300 dark:border-white/20 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10'
-                    : 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200'
-                }`}
-              >
-                {user.isFollowing ? (
-                  <>
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>{t('following_btn')}</span>
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>{t('follow')}</span>
-                  </>
-                )}
-              </button>
-            </div>
-          ))}
+                <button
+                  onClick={() => toggleFollowUser(user.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 shrink-0 ${
+                    user.isFollowing
+                      ? 'border border-zinc-300 dark:border-white/20 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10'
+                      : 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200'
+                  }`}
+                >
+                  {user.isFollowing ? (
+                    <>
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>{t('following_btn')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>{t('follow')}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="px-2 text-[11px] text-zinc-400 dark:text-zinc-600 flex flex-wrap gap-x-3 gap-y-1">
         <span>Terms</span>

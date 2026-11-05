@@ -73,42 +73,50 @@ export const MobileBottomNav: React.FC = () => {
     { href: '/profile', icon: User, label: 'Profile' },
   ];
 
-  const MotionLink = motion(Link);
+  const activeIndex = items.findIndex((item) =>
+    item.href === '/feed'
+      ? pathname === '/feed'
+      : pathname.startsWith(item.href)
+  );
 
   return (
     <nav className="md:hidden fixed bottom-3 left-4 right-4 z-50 select-none pb-safe">
-      <div className="flex items-center justify-around max-w-md mx-auto px-2 py-1.5 rounded-full bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl border border-zinc-200/80 dark:border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.2)]">
-        {items.map((item) => {
+      <div className="relative grid grid-cols-6 max-w-md mx-auto p-1.5 rounded-full bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl border border-zinc-200/80 dark:border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.2)]">
+        {/* Persistent sliding indicator: glides seamlessly from previous button to new button */}
+        {activeIndex !== -1 && (
+          <motion.div
+            initial={false}
+            animate={{
+              x: `${activeIndex * 100}%`,
+            }}
+            transition={{
+              type: 'spring',
+              stiffness: 400,
+              damping: 32,
+            }}
+            className="absolute top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/6)] rounded-full bg-zinc-900 dark:bg-white shadow-[0_0_16px_rgba(0,0,0,0.15)] dark:shadow-[0_0_18px_rgba(255,255,255,0.28)] pointer-events-none"
+          />
+        )}
+
+        {items.map((item, idx) => {
           const Icon = item.icon;
-          const isActive =
-            item.href === '/feed'
-              ? pathname === '/feed'
-              : pathname.startsWith(item.href);
+          const isActive = idx === activeIndex;
 
           return (
-            <MotionLink
+            <Link
               key={item.href}
               href={item.href}
-              whileTap={{ scale: 0.88 }}
-              transition={{ type: 'spring', stiffness: 450, damping: 25 }}
-              className={`relative flex items-center justify-center p-2.5 rounded-full transition-colors duration-200 ${
+              className={`relative z-10 flex items-center justify-center py-2.5 rounded-full transition-colors duration-200 active:scale-90 ${
                 isActive
-                  ? 'text-white dark:text-black'
+                  ? 'text-white dark:text-black font-bold'
                   : 'text-zinc-500 hover:text-black dark:text-zinc-400 dark:hover:text-white'
               }`}
             >
-              {isActive && (
-                <motion.div
-                  layoutId="mobileNavIndicator"
-                  transition={{ type: 'spring', stiffness: 450, damping: 32 }}
-                  className="absolute inset-0 rounded-full bg-zinc-900 dark:bg-white shadow-[0_0_16px_rgba(0,0,0,0.15)] dark:shadow-[0_0_18px_rgba(255,255,255,0.28)]"
-                />
-              )}
-              <Icon className="relative z-10 w-5 h-5 stroke-[1.8]" />
+              <Icon className="w-5 h-5 stroke-[1.8]" />
               {item.badge && !isActive && (
-                <span className="absolute top-1.5 right-1.5 z-20 w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />
+                <span className="absolute top-1.5 right-2 z-20 w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />
               )}
-            </MotionLink>
+            </Link>
           );
         })}
       </div>

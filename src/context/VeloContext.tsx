@@ -154,13 +154,81 @@ const STORAGE_KEYS = {
   SETTINGS: 'velo_settings',
 };
 
+// Permanent filter for old dummy mock data
+const DUMMY_IDS = new Set([
+  'usr_me',
+  'usr_elena',
+  'usr_marcus',
+  'usr_sarah',
+  'usr_kai',
+  'usr_jordan',
+  'usr_google_demo',
+  'pst_1',
+  'pst_2',
+  'pst_3',
+  'pst_arch_1',
+  'sty_1',
+  'sty_2',
+  'sty_3',
+  'sty_arch_1',
+  'conv_elena',
+  'conv_marcus',
+  'act_1',
+  'act_2',
+  'act_3',
+  'act_4',
+  'act_5',
+  'act_6',
+]);
+
+const DUMMY_USERNAMES = new Set([
+  'alex_chen',
+  'elena_rostova',
+  'marcus_v',
+  'sarah_k',
+  'kai_zen',
+  'jordan_google',
+]);
+
+function isDummyItem(item: any): boolean {
+  if (!item) return false;
+  if (typeof item === 'string') {
+    return DUMMY_IDS.has(item) || DUMMY_USERNAMES.has(item.toLowerCase());
+  }
+  if (item.id && DUMMY_IDS.has(item.id)) return true;
+  if (item.username && DUMMY_USERNAMES.has(item.username.toLowerCase())) return true;
+  if (item.authorId && DUMMY_IDS.has(item.authorId)) return true;
+  if (item.author) {
+    if (item.author.id && DUMMY_IDS.has(item.author.id)) return true;
+    if (item.author.username && DUMMY_USERNAMES.has(item.author.username.toLowerCase())) return true;
+  }
+  if (item.participant) {
+    if (item.participant.id && DUMMY_IDS.has(item.participant.id)) return true;
+    if (item.participant.username && DUMMY_USERNAMES.has(item.participant.username.toLowerCase())) return true;
+  }
+  return false;
+}
+
+async function syncToServer(action: string, payload: any) {
+  try {
+    await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, payload }),
+    });
+  } catch {}
+}
+
 export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isHydrated, setIsHydrated] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     if (typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-        if (stored) return JSON.parse(stored);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && !isDummyItem(parsed)) return parsed;
+        }
       } catch {}
     }
     return null;
@@ -174,7 +242,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const u: User = JSON.parse(storedUser);
           const stored = localStorage.getItem(`velo_following_${u.id}`);
           if (stored) return JSON.parse(stored);
-          if (u.id !== 'usr_me') return [];
+          return [];
         }
       } catch {}
     }
@@ -189,7 +257,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const u: User = JSON.parse(storedUser);
           const stored = localStorage.getItem(`velo_followers_${u.id}`);
           if (stored) return JSON.parse(stored);
-          if (u.id !== 'usr_me') return [];
+          return [];
         }
       } catch {}
     }
@@ -201,103 +269,24 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const stored = localStorage.getItem(STORAGE_KEYS.SAVED_ACCOUNTS);
         if (stored) {
-          const parsed = JSON.parse(stored);
-          // Purge dummy sample users that weren't genuinely registered
-          let cleaned = parsed.filter((u: any) => u.id !== 'usr_marcus' && u.id !== 'usr_elena');
-          const storedUser = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-          if (storedUser) {
-            const active = JSON.parse(storedUser);
-            if (active.id !== 'usr_me') {
-              cleaned = cleaned.filter((u: any) => u.id !== 'usr_me');
-            }
-          }
-          if (cleaned.length > 0) return cleaned;
+          const parsed: User[] = JSON.parse(stored);
+          const cleaned = parsed.filter((u) => !isDummyItem(u));
+          return cleaned.slice(0, 3);
         }
       } catch {}
     }
     return [];
   });
-  const [allUsers, setAllUsers] = useState<User[]>([CURRENT_USER, ...SAMPLE_USERS]);
-  const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
-  const [archivedPosts, setArchivedPosts] = useState<Post[]>(INITIAL_ARCHIVED_POSTS);
-  const [stories, setStories] = useState<Story[]>(INITIAL_STORIES);
-  const [archivedStories, setArchivedStories] = useState<Story[]>(INITIAL_ARCHIVED_STORIES);
-  const [conversations, setConversations] = useState<Conversation[]>(INITIAL_CONVERSATIONS);
-  const [messages, setMessages] = useState<Record<string, Message[]>>({
-    conv_elena: [
-      {
-        id: 'msg_e_1',
-        conversationId: 'conv_elena',
-        senderId: SAMPLE_USERS[0].id,
-        text: 'Hey Alex, check out the new 35mm film stills from Shinjuku.',
-        photos: [
-          'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=600&auto=format&fit=crop&q=80',
-          'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80',
-        ],
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-        read: true,
-      },
-      {
-        id: 'msg_e_2',
-        conversationId: 'conv_elena',
-        senderId: CURRENT_USER.id,
-        text: 'These look very cinematic. Love the dark tones and subtle lighting.',
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 1.5).toISOString(),
-        read: true,
-      },
-    ],
-    conv_marcus: [
-      {
-        id: 'msg_m_1',
-        conversationId: 'conv_marcus',
-        senderId: SAMPLE_USERS[1].id,
-        text: 'Recorded a quick synth lead demo for the upcoming ambient set.',
-        voiceNote: {
-          url: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/11/71/d6/1171d6ad-3c96-e027-2af6-58028426588c/mzaf_15137631797407745471.plus.aac.p.m4a',
-          duration: 18,
-          waveform: [20, 50, 80, 40, 90, 60, 100, 75, 45, 85, 30, 95, 65, 40, 20],
-        },
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-        read: true,
-      },
-    ],
-  });
-  const [comments, setComments] = useState<Record<string, Comment[]>>({
-    pst_1: [
-      {
-        id: 'c_1',
-        postId: 'pst_1',
-        author: CURRENT_USER,
-        content: 'The lighting in this scene is extraordinary Elena! That neon reflection in the rain puddles is magical.',
-        likesCount: 14,
-        isLiked: true,
-        createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-        replies: [
-          {
-            id: 'c_1_rep_1',
-            postId: 'pst_1',
-            parentId: 'c_1',
-            replyToUsername: CURRENT_USER.username,
-            author: SAMPLE_USERS[0],
-            content: 'Thank you Alex! Shot on 500T with a diffusion filter.',
-            likesCount: 4,
-            isLiked: false,
-            createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-          },
-        ],
-      },
-      {
-        id: 'c_2',
-        postId: 'pst_1',
-        author: SAMPLE_USERS[1],
-        content: 'Midnight City was the perfect score choice for this clip.',
-        likesCount: 8,
-        isLiked: false,
-        createdAt: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
-      },
-    ],
-  });
-  const [activities, setActivities] = useState<Activity[]>(INITIAL_ACTIVITIES);
+
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [archivedPosts, setArchivedPosts] = useState<Post[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
+  const [archivedStories, setArchivedStories] = useState<Story[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [messages, setMessages] = useState<Record<string, Message[]>>({});
+  const [comments, setComments] = useState<Record<string, Comment[]>>({});
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [settings, setSettings] = useState<VeloSettings>({
     ...DEFAULT_SETTINGS,
     chatBubbleColor: 'zinc-dark',
@@ -309,25 +298,30 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let activeUser: User | null = null;
       const storedUser = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
       if (storedUser) {
-        activeUser = JSON.parse(storedUser);
-        setCurrentUser(activeUser);
+        const parsed = JSON.parse(storedUser);
+        if (parsed && !isDummyItem(parsed)) {
+          activeUser = parsed;
+          setCurrentUser(activeUser);
+        } else {
+          localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+          setCurrentUser(null);
+        }
       } else {
         setCurrentUser(null);
       }
 
       if (activeUser) {
-        const isCustomUser = activeUser.id !== 'usr_me';
         const storedFollowing = localStorage.getItem(`velo_following_${activeUser.id}`);
         if (storedFollowing) {
           setFollowingIds(JSON.parse(storedFollowing));
-        } else if (isCustomUser) {
+        } else {
           setFollowingIds([]);
         }
 
         const storedFollowers = localStorage.getItem(`velo_followers_${activeUser.id}`);
         if (storedFollowers) {
           setFollowersIds(JSON.parse(storedFollowers));
-        } else if (isCustomUser) {
+        } else {
           setFollowersIds([]);
         }
       }
@@ -336,57 +330,144 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (storedAccounts) {
         try {
           const parsed: User[] = JSON.parse(storedAccounts);
-          let cleaned = parsed.filter(
-            (u) => u.id !== 'usr_marcus' && u.id !== 'usr_elena'
-          );
-          // If active user is a real custom account, purge dummy placeholder usr_me (Alex Chen)
-          if (activeUser && activeUser.id !== 'usr_me') {
-            cleaned = cleaned.filter((u) => u.id !== 'usr_me');
-          }
+          const cleaned = parsed.filter((u) => !isDummyItem(u));
           if (activeUser && !cleaned.some((u) => u.id === activeUser!.id)) {
-            cleaned.push(activeUser);
+            cleaned.unshift(activeUser);
           }
-          if (cleaned.length > 0) {
-            setSavedAccounts(cleaned);
-            safeLocalStorageSet(STORAGE_KEYS.SAVED_ACCOUNTS, JSON.stringify(cleaned));
-          } else if (activeUser) {
-            setSavedAccounts([activeUser]);
-            safeLocalStorageSet(STORAGE_KEYS.SAVED_ACCOUNTS, JSON.stringify([activeUser]));
-          }
+          const finalAccounts = cleaned.slice(0, 3);
+          setSavedAccounts(finalAccounts);
+          safeLocalStorageSet(STORAGE_KEYS.SAVED_ACCOUNTS, JSON.stringify(finalAccounts));
         } catch {}
       }
 
+      // Purge and load real local data
       const storedPosts = localStorage.getItem(STORAGE_KEYS.POSTS);
-      if (storedPosts) setPosts(JSON.parse(storedPosts));
-
-      const storedArchivedPosts = localStorage.getItem(STORAGE_KEYS.ARCHIVED_POSTS);
-      if (storedArchivedPosts) setArchivedPosts(JSON.parse(storedArchivedPosts));
+      if (storedPosts) {
+        const parsed: Post[] = JSON.parse(storedPosts);
+        const filtered = parsed.filter((p) => !isDummyItem(p));
+        setPosts(filtered);
+        safeLocalStorageSet(STORAGE_KEYS.POSTS, JSON.stringify(filtered));
+      }
 
       const storedStories = localStorage.getItem(STORAGE_KEYS.STORIES);
-      if (storedStories) setStories(JSON.parse(storedStories));
-
-      const storedArchivedStories = localStorage.getItem(STORAGE_KEYS.ARCHIVED_STORIES);
-      if (storedArchivedStories) setArchivedStories(JSON.parse(storedArchivedStories));
+      if (storedStories) {
+        const parsed: Story[] = JSON.parse(storedStories);
+        const filtered = parsed.filter((s) => !isDummyItem(s));
+        setStories(filtered);
+        safeLocalStorageSet(STORAGE_KEYS.STORIES, JSON.stringify(filtered));
+      }
 
       const storedUsers = localStorage.getItem(STORAGE_KEYS.ALL_USERS);
-      if (storedUsers) setAllUsers(JSON.parse(storedUsers));
+      if (storedUsers) {
+        const parsed: User[] = JSON.parse(storedUsers);
+        const filtered = parsed.filter((u) => !isDummyItem(u));
+        setAllUsers(filtered);
+        safeLocalStorageSet(STORAGE_KEYS.ALL_USERS, JSON.stringify(filtered));
+      }
 
       const storedConvs = localStorage.getItem(STORAGE_KEYS.CONVERSATIONS);
-      if (storedConvs) setConversations(JSON.parse(storedConvs));
-
-      const storedMsgs = localStorage.getItem(STORAGE_KEYS.MESSAGES);
-      if (storedMsgs) setMessages(JSON.parse(storedMsgs));
-
-      const storedComments = localStorage.getItem(STORAGE_KEYS.COMMENTS);
-      if (storedComments) setComments(JSON.parse(storedComments));
+      if (storedConvs) {
+        const parsed: Conversation[] = JSON.parse(storedConvs);
+        const filtered = parsed.filter((c) => !isDummyItem(c));
+        setConversations(filtered);
+        safeLocalStorageSet(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(filtered));
+      }
 
       const storedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       if (storedSettings) setSettings(JSON.parse(storedSettings));
+
+      // Fetch centralized database from server API (/api/data)
+      const pullServerData = async () => {
+        try {
+          const res = await fetch('/api/data', { cache: 'no-store' });
+          if (!res.ok) return;
+          const json = await res.json();
+          if (json.success && json.data) {
+            const server = json.data;
+            if (server.users && Array.isArray(server.users)) {
+              setAllUsers((prev) => {
+                const map = new Map<string, User>();
+                prev.filter((u) => !DUMMY_IDS.has(u.id)).forEach((u) => map.set(u.id, u));
+                server.users.filter((u: User) => !DUMMY_IDS.has(u.id)).forEach((u: User) => map.set(u.id, u));
+                const merged = Array.from(map.values());
+                safeLocalStorageSet(STORAGE_KEYS.ALL_USERS, JSON.stringify(merged));
+                return merged;
+              });
+            }
+            if (server.posts && Array.isArray(server.posts)) {
+              const cleanPosts = (server.posts as Post[]).filter(
+                (p) => !DUMMY_IDS.has(p.id) && !DUMMY_IDS.has(p.authorId)
+              );
+              setPosts(cleanPosts);
+              safeLocalStorageSet(STORAGE_KEYS.POSTS, JSON.stringify(cleanPosts));
+            }
+            if (server.stories && Array.isArray(server.stories)) {
+              const cleanStories = (server.stories as Story[]).filter(
+                (s) => !DUMMY_IDS.has(s.id) && !DUMMY_IDS.has(s.authorId)
+              );
+              setStories(cleanStories);
+              safeLocalStorageSet(STORAGE_KEYS.STORIES, JSON.stringify(cleanStories));
+            }
+            if (server.conversations && Array.isArray(server.conversations)) {
+              const cleanConvs = (server.conversations as Conversation[]).filter(
+                (c) => !DUMMY_IDS.has(c.id) && !DUMMY_IDS.has(c.participant?.id)
+              );
+              setConversations(cleanConvs);
+            }
+            if (server.messages) {
+              setMessages(server.messages);
+            }
+          }
+        } catch {}
+      };
+
+      pullServerData();
     } catch {
       // Fallback
     } finally {
       setIsHydrated(true);
     }
+
+    // Real-time synchronization interval across devices (every 4.5s)
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetch('/api/data', { cache: 'no-store' })
+          .then((r) => r.json())
+          .then((json) => {
+            if (json.success && json.data) {
+              const server = json.data;
+              if (server.users) {
+                setAllUsers((prev) => {
+                  const map = new Map<string, User>();
+                  prev.filter((u) => !DUMMY_IDS.has(u.id)).forEach((u) => map.set(u.id, u));
+                  server.users.filter((u: User) => !DUMMY_IDS.has(u.id)).forEach((u: User) => map.set(u.id, u));
+                  return Array.from(map.values());
+                });
+              }
+              if (server.posts) {
+                setPosts(
+                  (server.posts as Post[]).filter(
+                    (p) => !DUMMY_IDS.has(p.id) && !DUMMY_IDS.has(p.authorId)
+                  )
+                );
+              }
+              if (server.stories) {
+                setStories(
+                  (server.stories as Story[]).filter(
+                    (s) => !DUMMY_IDS.has(s.id) && !DUMMY_IDS.has(s.authorId)
+                  )
+                );
+              }
+              if (server.messages) {
+                setMessages(server.messages);
+              }
+            }
+          })
+          .catch(() => {});
+      }
+    }, 4500);
+
+    return () => clearInterval(interval);
   }, []);
 
   const showToast = (message: string, type: 'success' | 'info' | 'error' = 'info') => {
@@ -450,6 +531,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       safeLocalStorageSet(STORAGE_KEYS.SAVED_ACCOUNTS, JSON.stringify(updated));
       return updated;
     });
+    syncToServer('REGISTER_USER', { user });
     showToast(`Welcome back, @${user.username}`, 'success');
   };
 
@@ -463,6 +545,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       safeLocalStorageSet(STORAGE_KEYS.ALL_USERS, JSON.stringify(updated));
       return updated;
     });
+    syncToServer('REGISTER_USER', { user });
   };
 
   const logout = () => {
@@ -558,6 +641,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.warn('Could not persist full profile to localStorage:', e);
     }
+    syncToServer('UPDATE_USER', { user: newProfile });
     showToast('Profile updated', 'success');
   };
 
@@ -588,6 +672,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = [newPost, ...posts];
     setPosts(updated);
     safeLocalStorageSet(STORAGE_KEYS.POSTS, JSON.stringify(updated));
+    syncToServer('ADD_POST', { post: newPost });
     showToast('Post published', 'success');
     return newPost;
   };
@@ -675,6 +760,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPosts(remainingPosts);
     localStorage.setItem(STORAGE_KEYS.ARCHIVED_POSTS, JSON.stringify(remainingArchived));
     localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(remainingPosts));
+    syncToServer('DELETE_POST', { postId });
     showToast('Post permanently deleted', 'info');
   };
 
@@ -782,6 +868,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = [newStory, ...stories];
     setStories(updated);
     safeLocalStorageSet(STORAGE_KEYS.STORIES, JSON.stringify(updated));
+    syncToServer('ADD_STORY', { story: newStory });
     showToast('Story published', 'success');
     return newStory;
   };
@@ -791,12 +878,16 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setStories((prev) =>
       prev.map((s) => {
         if (s.id === storyId) {
+          // Rule 7: Creator must NOT be recorded as viewer of their own story
+          if (s.authorId === currentUser.id) return s;
           const alreadyViewed = s.viewers.some((v) => v.user.id === currentUser.id);
           if (alreadyViewed) return s;
-          return {
+          const updated = {
             ...s,
             viewers: [...s.viewers, { user: currentUser, viewedAt: new Date().toISOString() }],
           };
+          syncToServer('VIEW_STORY', { storyId, user: currentUser });
+          return updated;
         }
         return s;
       })
@@ -807,6 +898,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = stories.filter((s) => s.id !== storyId);
     setStories(updated);
     localStorage.setItem(STORAGE_KEYS.STORIES, JSON.stringify(updated));
+    syncToServer('DELETE_STORY', { storyId });
     showToast('Story deleted', 'info');
   };
 
@@ -959,6 +1051,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         c.id === conversationId ? { ...c, lastMessage: newMsg, unreadCount: 0 } : c
       )
     );
+    syncToServer('SEND_MESSAGE', { conversationId, message: newMsg });
   };
 
   const toggleMessageReaction = (conversationId: string, messageId: string, emoji: string) => {

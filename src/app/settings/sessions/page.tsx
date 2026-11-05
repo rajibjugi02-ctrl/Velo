@@ -82,25 +82,6 @@ export default function ActiveSessionsPage() {
     });
   }, []);
 
-  const secondarySessions = [
-    {
-      id: 'sess_prev_1',
-      device: 'Apple iPhone 15 Pro • Safari iOS',
-      location: 'San Francisco, CA • United States',
-      ip: '192.168.1.108',
-      lastActive: 'Active 4 hours ago',
-      icon: Smartphone,
-    },
-    {
-      id: 'sess_prev_2',
-      device: 'MacBook Air M2 • Brave Browser',
-      location: 'Tokyo, Japan • Studio Workspace',
-      ip: '203.0.113.88',
-      lastActive: 'Active 3 days ago',
-      icon: Laptop,
-    },
-  ];
-
   const getDeviceIcon = (type: 'desktop' | 'mobile' | 'tablet') => {
     switch (type) {
       case 'mobile':
@@ -180,38 +161,14 @@ export default function ActiveSessionsPage() {
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-zinc-500 dark:text-zinc-400" />
             <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
-              Other Recent Sessions (2)
+              Other Recent Sessions (0)
             </h2>
           </div>
 
-          <div className="space-y-2.5">
-            {secondarySessions.map((sess) => {
-              const Icon = sess.icon;
-              return (
-                <div
-                  key={sess.id}
-                  className="flex items-center justify-between p-3.5 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] border border-zinc-200/80 dark:border-white/[0.06]"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-2.5 rounded-xl bg-white dark:bg-white/[0.06] border border-zinc-200/80 dark:border-white/[0.08] text-zinc-600 dark:text-zinc-300 shrink-0">
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-zinc-900 dark:text-white truncate">
-                        {sess.device}
-                      </p>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
-                        {sess.location} • {sess.ip}
-                      </p>
-                    </div>
-                  </div>
-
-                  <span className="text-[11px] text-zinc-400 dark:text-zinc-500 shrink-0">
-                    {sess.lastActive}
-                  </span>
-                </div>
-              );
-            })}
+          <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.02] border border-zinc-200/80 dark:border-white/[0.05] text-center">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              No other active sessions detected. Your account is securely authenticated on this active device only.
+            </p>
           </div>
         </div>
 
