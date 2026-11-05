@@ -363,6 +363,13 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       if (storedSettings) setSettings(JSON.parse(storedSettings));
 
+      const storedActivities = localStorage.getItem(STORAGE_KEYS.ACTIVITIES);
+      if (storedActivities) {
+        try {
+          setActivities(JSON.parse(storedActivities));
+        } catch {}
+      }
+
       // Fetch centralized database from server API (/api/data)
       const pullServerData = async () => {
         try {
@@ -432,6 +439,26 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             if (server.messages) {
               setMessages(server.messages);
+            }
+            if (server.activities && Array.isArray(server.activities)) {
+              setActivities(server.activities);
+              safeLocalStorageSet(STORAGE_KEYS.ACTIVITIES, JSON.stringify(server.activities));
+            }
+            if (server.follows && activeUser) {
+              const followers = server.follows[activeUser.id] || [];
+              setFollowersIds(followers);
+              safeLocalStorageSet(`velo_followers_${activeUser.id}`, JSON.stringify(followers));
+
+              const followings: string[] = [];
+              Object.entries(server.follows).forEach(([targetId, fList]) => {
+                if (Array.isArray(fList) && fList.includes(activeUser.id)) {
+                  followings.push(targetId);
+                }
+              });
+              if (followings.length > 0) {
+                setFollowingIds(followings);
+                safeLocalStorageSet(`velo_following_${activeUser.id}`, JSON.stringify(followings));
+              }
             }
           }
         } catch {}
@@ -522,6 +549,26 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
               if (server.messages) {
                 setMessages(server.messages);
+              }
+              if (server.activities && Array.isArray(server.activities)) {
+                setActivities(server.activities);
+                safeLocalStorageSet(STORAGE_KEYS.ACTIVITIES, JSON.stringify(server.activities));
+              }
+              if (server.follows && currentUser) {
+                const followers = server.follows[currentUser.id] || [];
+                setFollowersIds(followers);
+                safeLocalStorageSet(`velo_followers_${currentUser.id}`, JSON.stringify(followers));
+
+                const followings: string[] = [];
+                Object.entries(server.follows).forEach(([targetId, fList]) => {
+                  if (Array.isArray(fList) && fList.includes(currentUser.id)) {
+                    followings.push(targetId);
+                  }
+                });
+                if (followings.length > 0) {
+                  setFollowingIds(followings);
+                  safeLocalStorageSet(`velo_following_${currentUser.id}`, JSON.stringify(followings));
+                }
               }
             }
           })
@@ -1076,8 +1123,14 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isRead: false,
       };
       setActivities((acts) => [newAct, ...acts]);
-      syncToServer('ADD_ACTIVITY', { activity: newAct });
+      safeLocalStorageSet(STORAGE_KEYS.ACTIVITIES, JSON.stringify([newAct, ...activities]));
     }
+
+    syncToServer('TOGGLE_FOLLOW', {
+      followerId: currentUser.id,
+      followingId: userId,
+      actor: currentUser,
+    });
 
     const updatedCurrentUser: User = {
       ...currentUser,
@@ -1310,11 +1363,10 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     showToast('Local application cache cleared', 'success');
   };
 
-  // User-scoped activities: only usr_me gets sample initial activities; new accounts have clean real activity (zero dummy notifications)
-  const activeUserActivities =
-    currentUser?.id === 'usr_me'
-      ? activities
-      : activities.filter((a) => (a as any).recipientId === currentUser?.id);
+  // User-scoped activities: show notifications received by currentUser as well as their own follow activity
+  const activeUserActivities = activities.filter(
+    (a) => a.recipientId === currentUser?.id || a.actor.id === currentUser?.id
+  );
 
   // User-scoped conversations: only usr_me gets default demo chats; new accounts start with clean inbox (zero dummy unread badges)
   const activeUserConversations =

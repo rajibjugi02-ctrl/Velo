@@ -20,13 +20,21 @@ import {
 
 export default function ActivityPage() {
   const router = useRouter();
-  const { activities, allUsers, currentUser, toggleFollowUser, markActivityAsRead, followersIds } = useVelo();
+  const {
+    activities,
+    allUsers,
+    currentUser,
+    toggleFollowUser,
+    markActivityAsRead,
+    followersIds,
+    followingIds,
+  } = useVelo();
   const { t } = useLanguage();
 
   const [activeTab, setActiveTab] = useState<'interactions' | 'connections'>('interactions');
 
-  // Tab 1: Interactions (Likes, Reposts, Comments, Tags)
-  const interactionActivities = activities.filter((a) => a.type !== 'follow');
+  // Tab 1: All Activities & Notifications (Likes, Reposts, Comments, Tags, Follows)
+  const interactionActivities = activities;
 
   // Tab 2: Follows & Connections - strictly genuine creators who follow the active user
   const followersList = allUsers.filter((u) => (followersIds || []).includes(u.id));
@@ -41,6 +49,8 @@ export default function ActivityPage() {
         return <MessageCircle className="w-4 h-4 text-sky-400" />;
       case 'tag':
         return <Tag className="w-4 h-4 text-purple-400" />;
+      case 'follow':
+        return <UserPlus className="w-4 h-4 text-sky-400" />;
       default:
         return <Sparkles className="w-4 h-4 text-sky-400" />;
     }
@@ -56,6 +66,14 @@ export default function ActivityPage() {
         return `commented: "${activity.commentText || ''}"`;
       case 'tag':
         return 'tagged you in a publication or story';
+      case 'follow': {
+        const isRecipient = activity.recipientId === currentUser?.id;
+        if (isRecipient) {
+          return 'started following you';
+        }
+        const target = allUsers.find((u) => u.id === activity.recipientId);
+        return `you started following @${target?.username || 'creator'}`;
+      }
       default:
         return 'interacted with your content';
     }
@@ -115,6 +133,8 @@ export default function ActivityPage() {
                   markActivityAsRead(act.id);
                   if (act.targetPostId) {
                     router.push(`/post/${act.targetPostId}`);
+                  } else if (act.type === 'follow') {
+                    router.push(`/profile/${act.actor.username}`);
                   }
                 }}
                 className={`p-4 md:px-6 md:py-4 flex items-start gap-3.5 cursor-pointer transition-colors ${!act.isRead
@@ -158,6 +178,24 @@ export default function ActivityPage() {
                     {formatTimeAgo(act.createdAt)}
                   </span>
                 </div>
+
+                {/* Follow Back Action Button */}
+                {act.type === 'follow' && act.recipientId === currentUser?.id && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFollowUser(act.actor.id);
+                    }}
+                    className={`ml-auto px-3.5 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all ${
+                      followingIds.includes(act.actor.id)
+                        ? 'bg-zinc-200 dark:bg-white/10 text-zinc-700 dark:text-zinc-300'
+                        : 'bg-sky-500 hover:bg-sky-400 text-white font-bold shadow-sm'
+                    }`}
+                  >
+                    {followingIds.includes(act.actor.id) ? t('following_btn') : t('follow_back')}
+                  </button>
+                )}
 
                 {!act.isRead && (
                   <span className="w-2 h-2 rounded-full bg-sky-400 mt-2 shrink-0" />

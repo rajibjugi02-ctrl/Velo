@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readServerDb, writeServerDb } from '@/lib/serverDb';
-import { User, Post, Story, Message } from '@/types/velo';
+import { User, Post, Story, Message, Activity } from '@/types/velo';
 
 export const dynamic = 'force-dynamic';
 
@@ -209,6 +209,53 @@ export async function POST(req: Request) {
         const { activity } = payload;
         if (activity && activity.id) {
           db.activities = [activity, ...(db.activities || []).filter((a) => a.id !== activity.id)];
+        }
+        break;
+      }
+
+      case 'TOGGLE_FOLLOW': {
+        const { followerId, followingId, actor } = payload;
+        if (followerId && followingId) {
+          if (!db.follows) db.follows = {};
+          if (!db.follows[followingId]) db.follows[followingId] = [];
+
+          const isFollowing = db.follows[followingId].includes(followerId);
+          if (isFollowing) {
+            db.follows[followingId] = db.follows[followingId].filter((id) => id !== followerId);
+            if (db.activities) {
+              db.activities = db.activities.filter(
+                (a) => !(a.type === 'follow' && a.actor?.id === followerId && a.recipientId === followingId)
+              );
+            }
+          } else {
+            db.follows[followingId].push(followerId);
+            if (actor) {
+              const newAct: Activity = {
+                id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                type: 'follow',
+                actor,
+                recipientId: followingId,
+                createdAt: new Date().toISOString(),
+                isRead: false,
+              };
+              if (!db.activities) db.activities = [];
+              db.activities = [newAct, ...db.activities.filter((a) => a.id !== newAct.id)];
+            }
+          }
+
+          // Update user counts
+          const targetUser = db.users.find((u) => u.id === followingId);
+          if (targetUser) {
+            targetUser.followersCount = db.follows[followingId].length;
+          }
+          const followerUser = db.users.find((u) => u.id === followerId);
+          if (followerUser) {
+            let followingCount = 0;
+            Object.values(db.follows).forEach((followers) => {
+              if (followers.includes(followerId)) followingCount++;
+            });
+            followerUser.followingCount = followingCount;
+          }
         }
         break;
       }
