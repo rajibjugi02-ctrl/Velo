@@ -165,3 +165,4 @@ export const GoogleLoginButton: React.FC<GoogleLoginButtonProps> = ({ isSwitch =
 
   return <FallbackGoogleButton isSwitch={isSwitch} />;
 };
+
