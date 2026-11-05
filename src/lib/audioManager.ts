@@ -3,16 +3,33 @@ import { Song } from '@/types/velo';
 type AudioListener = (activePostId: string | null, isPlaying: boolean) => void;
 
 class GlobalAudioManager {
-  private currentAudio: HTMLAudioElement | null = null;
+  private singletonAudio: HTMLAudioElement | null = null;
   private currentPostId: string | null = null;
   private currentSong: Song | null = null;
   private listeners: Set<AudioListener> = new Set();
   private isUserMuted: boolean = false;
   private userPausedPosts: Set<string> = new Set();
+  private timeUpdateHandler: (() => void) | null = null;
+  private endedHandler: (() => void) | null = null;
+
+  // Lazy-load a single global <audio> element only when explicitly requested
+  private getAudio(): HTMLAudioElement | null {
+    if (typeof window === 'undefined') return null;
+    if (!this.singletonAudio) {
+      try {
+        this.singletonAudio = new Audio();
+        this.singletonAudio.preload = 'none';
+      } catch {
+        return null;
+      }
+    }
+    return this.singletonAudio;
+  }
 
   public subscribe(listener: AudioListener): () => void {
     this.listeners.add(listener);
-    const isPlaying = Boolean(this.currentAudio && !this.currentAudio.paused);
+    const audio = this.getAudio();
+    const isPlaying = Boolean(audio && !audio.paused);
     listener(this.currentPostId, isPlaying);
     return () => {
       this.listeners.delete(listener);
@@ -20,7 +37,8 @@ class GlobalAudioManager {
   }
 
   private notify() {
-    const isPlaying = Boolean(this.currentAudio && !this.currentAudio.paused);
+    const audio = this.getAudio();
+    const isPlaying = Boolean(audio && !audio.paused);
     this.listeners.forEach((listener) => listener(this.currentPostId, isPlaying));
   }
 
@@ -34,7 +52,7 @@ class GlobalAudioManager {
 
   public setMuted(muted: boolean) {
     this.isUserMuted = muted;
-    if (muted && this.currentAudio) {
+    if (muted) {
       this.pause();
     }
   }
@@ -42,31 +60,33 @@ class GlobalAudioManager {
   public play(postId: string, song: Song, isAutoScroll = false): void {
     if (this.isUserMuted || !song.previewUrl) return;
 
-    // If auto-scroll triggered this, but user manually paused this specific post, respect user choice
     if (isAutoScroll && this.userPausedPosts.has(postId)) {
       return;
     }
 
-    // If the same post is already loaded
-    if (this.currentPostId === postId && this.currentAudio) {
-      if (!this.currentAudio.paused) {
-        return; // Already playing smoothly
-      }
-      // If paused, resume playback without resetting timestamp
-      this.currentAudio
+    const audio = this.getAudio();
+    if (!audio) return;
+
+    // If the same post is already loaded, resume without reloading media
+    if (this.currentPostId === postId && audio.src.includes(song.previewUrl)) {
+      if (!audio.paused) return;
+      audio
         .play()
-        .then(() => {
-          this.notify();
-        })
+        .then(() => this.notify())
         .catch(() => {});
       return;
     }
 
-    // Switching to a new post: stop previous track cleanly
-    this.stopCurrent();
+    // Clean up previous listeners
+    if (this.timeUpdateHandler) {
+      audio.removeEventListener('timeupdate', this.timeUpdateHandler);
+      this.timeUpdateHandler = null;
+    }
+    if (this.endedHandler) {
+      audio.removeEventListener('ended', this.endedHandler);
+      this.endedHandler = null;
+    }
 
-    const audio = new Audio(song.previewUrl);
-    this.currentAudio = audio;
     this.currentPostId = postId;
     this.currentSong = song;
 
@@ -74,66 +94,57 @@ class GlobalAudioManager {
     const clipDuration = Math.max(15, song.duration || 15);
     const end = Math.max(start + clipDuration, song.endTime || start + clipDuration);
 
-    if (audio.readyState >= 1) {
+    try {
+      audio.src = song.previewUrl;
       audio.currentTime = start;
-    } else {
-      audio.addEventListener(
-        'loadedmetadata',
-        () => {
-          audio.currentTime = start;
-        },
-        { once: true }
-      );
-    }
+    } catch {}
 
     let isSeeking = false;
-    const handleTimeUpdate = () => {
+    this.timeUpdateHandler = () => {
       if (isSeeking) return;
       if (audio.currentTime >= end) {
         isSeeking = true;
         audio.currentTime = start;
         setTimeout(() => {
           isSeeking = false;
-        }, 400);
+        }, 300);
       }
     };
 
-    const handleEnded = () => {
-      audio.currentTime = start;
-      audio.play().catch(() => {});
+    this.endedHandler = () => {
+      try {
+        audio.currentTime = start;
+        audio.play().catch(() => {});
+      } catch {}
     };
 
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('timeupdate', this.timeUpdateHandler);
+    audio.addEventListener('ended', this.endedHandler);
 
     audio
       .play()
-      .then(() => {
-        this.notify();
-      })
-      .catch(() => {
-        this.notify();
-      });
+      .then(() => this.notify())
+      .catch(() => this.notify());
   }
 
   public pause(postId?: string): void {
-    if (postId && this.currentPostId !== postId) {
-      return;
-    }
+    if (postId && this.currentPostId !== postId) return;
 
-    if (this.currentAudio && !this.currentAudio.paused) {
-      this.currentAudio.pause();
+    const audio = this.getAudio();
+    if (audio && !audio.paused) {
+      try {
+        audio.pause();
+      } catch {}
       this.notify();
     }
   }
 
   public toggle(postId: string, song: Song): void {
-    if (this.currentPostId === postId && this.currentAudio && !this.currentAudio.paused) {
-      // User explicitly paused
+    const audio = this.getAudio();
+    if (this.currentPostId === postId && audio && !audio.paused) {
       this.userPausedPosts.add(postId);
       this.pause(postId);
     } else {
-      // User explicitly played
       this.userPausedPosts.delete(postId);
       this.isUserMuted = false;
       this.play(postId, song, false);
@@ -141,13 +152,21 @@ class GlobalAudioManager {
   }
 
   public stopCurrent() {
-    if (this.currentAudio) {
+    const audio = this.getAudio();
+    if (audio) {
       try {
-        this.currentAudio.pause();
-        this.currentAudio.removeAttribute('src');
-        this.currentAudio.load();
+        audio.pause();
+        audio.currentTime = 0;
+        audio.removeAttribute('src');
       } catch {}
-      this.currentAudio = null;
+    }
+    if (this.timeUpdateHandler && audio) {
+      audio.removeEventListener('timeupdate', this.timeUpdateHandler);
+      this.timeUpdateHandler = null;
+    }
+    if (this.endedHandler && audio) {
+      audio.removeEventListener('ended', this.endedHandler);
+      this.endedHandler = null;
     }
     this.currentPostId = null;
     this.currentSong = null;

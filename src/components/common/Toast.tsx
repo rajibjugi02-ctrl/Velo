@@ -14,7 +14,7 @@ export const ToastContainer: React.FC = () => {
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className="pointer-events-auto flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-white/95 dark:bg-zinc-950/90 backdrop-blur-2xl border border-zinc-200 dark:border-white/15 text-zinc-900 dark:text-white shadow-2xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-3"
+          className="pointer-events-auto flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-white/95 dark:bg-zinc-950/90 backdrop-blur-lg border border-zinc-200 dark:border-white/15 text-zinc-900 dark:text-white shadow-2xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-3"
         >
           <div className="flex items-center gap-3 min-w-0">
             {toast.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400 shrink-0" />}

@@ -98,39 +98,45 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
     }
   }, [effectiveDuration, stopSyntheticPlayback]);
 
+  // Lazy initialization of HTML5 Audio to satisfy iOS Safari memory quotas
+  const getOrCreateAudio = useCallback(() => {
+    if (!audioRef.current && url) {
+      try {
+        const audio = new Audio(url);
+        audio.onloadedmetadata = () => {
+          if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+            setAudioDuration(Math.round(audio.duration));
+          }
+        };
+        audio.ontimeupdate = () => {
+          if (!isSyntheticPlayingRef.current) {
+            setCurrentTime(audio.currentTime);
+          }
+        };
+        audio.onended = () => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+        };
+        audioRef.current = audio;
+      } catch {
+        return null;
+      }
+    }
+    return audioRef.current;
+  }, [url]);
+
   useEffect(() => {
-    if (!url) return;
-
-    const audio = new Audio(url);
-    audioRef.current = audio;
-
-    audio.onloadedmetadata = () => {
-      if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
-        setAudioDuration(Math.round(audio.duration));
-      }
-    };
-
-    audio.ontimeupdate = () => {
-      if (!isSyntheticPlayingRef.current) {
-        setCurrentTime(audio.currentTime);
-      }
-    };
-
-    audio.onended = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-    };
-
-    audio.onerror = () => {
-      // Remote audio errored; fallback to synth when user clicks play
-    };
-
     return () => {
-      audio.pause();
-      audioRef.current = null;
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause();
+          audioRef.current.src = '';
+        } catch { }
+        audioRef.current = null;
+      }
       stopSyntheticPlayback();
     };
-  }, [url, stopSyntheticPlayback]);
+  }, [stopSyntheticPlayback]);
 
   const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -146,15 +152,15 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
       return;
     }
 
-    // Try playing HTML5 Audio first
-    if (audioRef.current) {
-      audioRef.current
+    const audio = getOrCreateAudio();
+    if (audio) {
+      audio
         .play()
         .then(() => {
           setIsPlaying(true);
         })
         .catch(() => {
-          // If browser blocked or remote URL unreachable, play via Web Audio API synth
+          // Fallback to Web Audio API synthesized voice
           playSyntheticAudio(currentTime);
         });
     } else {
@@ -185,11 +191,10 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
       <button
         type="button"
         onClick={togglePlay}
-        className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all ${
-          isSender
+        className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all ${isSender
             ? 'bg-white/20 hover:bg-white/30 text-white'
             : 'bg-zinc-900 text-white dark:bg-white dark:text-black hover:opacity-90'
-        }`}
+          }`}
         title={isPlaying ? 'Pause voice note' : 'Play voice note'}
       >
         {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
@@ -208,15 +213,14 @@ export const VoicePlayer: React.FC<VoicePlayerProps> = ({
                 <span
                   key={i}
                   style={{ height: `${height}%` }}
-                  className={`w-[3px] rounded-full transition-colors ${
-                    isFilled
+                  className={`w-[3px] rounded-full transition-colors ${isFilled
                       ? isSender
                         ? 'bg-white'
                         : 'bg-zinc-900 dark:bg-white'
                       : isSender
-                      ? 'bg-white/30'
-                      : 'bg-zinc-400/50 dark:bg-zinc-700'
-                  }`}
+                        ? 'bg-white/30'
+                        : 'bg-zinc-400/50 dark:bg-zinc-700'
+                    }`}
                 />
               );
             })}

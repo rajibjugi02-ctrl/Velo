@@ -97,7 +97,11 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
     audio.addEventListener('ended', handleEnded);
 
     return () => {
-      audio.pause();
+      try {
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+      } catch {}
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);

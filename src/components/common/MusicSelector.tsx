@@ -65,11 +65,19 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
   useEffect(() => {
     if (!isOpen) {
       if (previewAudioRef.current) {
-        previewAudioRef.current.pause();
+        try {
+          previewAudioRef.current.pause();
+          previewAudioRef.current.removeAttribute('src');
+          previewAudioRef.current.load();
+        } catch {}
         previewAudioRef.current = null;
       }
       if (customAudioRef.current) {
-        customAudioRef.current.pause();
+        try {
+          customAudioRef.current.pause();
+          customAudioRef.current.removeAttribute('src');
+          customAudioRef.current.load();
+        } catch {}
         customAudioRef.current = null;
       }
       setPreviewingSongId(null);
@@ -80,21 +88,32 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
   const handleTogglePreview = (song: Song) => {
     if (previewingSongId === song.id) {
       if (previewAudioRef.current) {
-        previewAudioRef.current.pause();
+        try {
+          previewAudioRef.current.pause();
+        } catch {}
         setPreviewingSongId(null);
       }
       return;
     }
 
     if (previewAudioRef.current) {
-      previewAudioRef.current.pause();
+      try {
+        previewAudioRef.current.pause();
+      } catch {}
     }
 
     if (song.previewUrl) {
-      const audio = new Audio(song.previewUrl);
-      previewAudioRef.current = audio;
-      audio.play().then(() => setPreviewingSongId(song.id)).catch(() => setPreviewingSongId(null));
-      audio.onended = () => setPreviewingSongId(null);
+      if (!previewAudioRef.current) {
+        previewAudioRef.current = new Audio();
+      }
+      const audio = previewAudioRef.current;
+      try {
+        audio.src = song.previewUrl;
+        audio.play().then(() => setPreviewingSongId(song.id)).catch(() => setPreviewingSongId(null));
+        audio.onended = () => setPreviewingSongId(null);
+      } catch {
+        setPreviewingSongId(null);
+      }
     }
   };
 
@@ -133,36 +152,42 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
 
     if (isTrimmingPlaying) {
       if (customAudioRef.current) {
-        customAudioRef.current.pause();
+        try { customAudioRef.current.pause(); } catch {}
       }
       setIsTrimmingPlaying(false);
       return;
     }
 
     if (customAudioRef.current) {
-      customAudioRef.current.pause();
+      try { customAudioRef.current.pause(); } catch {}
     }
 
-    const audio = new Audio(customAudioUrl);
-    customAudioRef.current = audio;
-    audio.currentTime = trimStart;
+    if (!customAudioRef.current) {
+      customAudioRef.current = new Audio();
+    }
+    const audio = customAudioRef.current;
+    try {
+      audio.src = customAudioUrl;
+      audio.currentTime = trimStart;
 
-    audio.play().then(() => {
-      setIsTrimmingPlaying(true);
+      audio.play().then(() => {
+        setIsTrimmingPlaying(true);
 
-      // Auto-stop after trimDuration
-      const timer = setTimeout(() => {
-        if (customAudioRef.current === audio) {
-          audio.pause();
+        const timer = setTimeout(() => {
+          if (customAudioRef.current === audio) {
+            try { audio.pause(); } catch {}
+            setIsTrimmingPlaying(false);
+          }
+        }, trimDuration * 1000);
+
+        audio.onended = () => {
+          clearTimeout(timer);
           setIsTrimmingPlaying(false);
-        }
-      }, trimDuration * 1000);
-
-      audio.onended = () => {
-        clearTimeout(timer);
-        setIsTrimmingPlaying(false);
-      };
-    });
+        };
+      }).catch(() => setIsTrimmingPlaying(false));
+    } catch {
+      setIsTrimmingPlaying(false);
+    }
   };
 
   const confirmCustomSong = () => {

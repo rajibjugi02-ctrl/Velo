@@ -262,6 +262,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const allUsersRef = useRef<User[]>(allUsers);
+  const isFetchingRef = useRef<boolean>(false);
   useEffect(() => {
     allUsersRef.current = allUsers;
   }, [allUsers]);
@@ -599,9 +600,12 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsHydrated(true);
     }
 
-    // Real-time synchronization interval across devices (every 2.5s)
+    // Real-time synchronization interval across devices (every 8s with in-flight guard)
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
+        if (isFetchingRef.current) return;
+        isFetchingRef.current = true;
+
         fetch('/api/data', { cache: 'no-store' })
           .then((r) => r.json())
           .then((json) => {
@@ -610,30 +614,30 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
               const activeArchivedPostIds = new Set<string>();
               if (server.archivedPosts && Array.isArray(server.archivedPosts)) {
-                setArchivedPosts(server.archivedPosts);
-                safeLocalStorageSet(STORAGE_KEYS.ARCHIVED_POSTS, JSON.stringify(server.archivedPosts));
+                setArchivedPosts((prev) => {
+                  if (
+                    prev.length === server.archivedPosts.length &&
+                    prev.every((p, i) => p.id === server.archivedPosts[i].id)
+                  ) {
+                    return prev;
+                  }
+                  return server.archivedPosts;
+                });
                 server.archivedPosts.forEach((p: Post) => activeArchivedPostIds.add(p.id));
-              } else {
-                const localArchived = localStorage.getItem(STORAGE_KEYS.ARCHIVED_POSTS);
-                if (localArchived) {
-                  try {
-                    JSON.parse(localArchived).forEach((p: Post) => activeArchivedPostIds.add(p.id));
-                  } catch {}
-                }
               }
 
               const activeArchivedStoryIds = new Set<string>();
               if (server.archivedStories && Array.isArray(server.archivedStories)) {
-                setArchivedStories(server.archivedStories);
-                safeLocalStorageSet(STORAGE_KEYS.ARCHIVED_STORIES, JSON.stringify(server.archivedStories));
+                setArchivedStories((prev) => {
+                  if (
+                    prev.length === server.archivedStories.length &&
+                    prev.every((s, i) => s.id === server.archivedStories[i].id)
+                  ) {
+                    return prev;
+                  }
+                  return server.archivedStories;
+                });
                 server.archivedStories.forEach((s: Story) => activeArchivedStoryIds.add(s.id));
-              } else {
-                const localArchivedS = localStorage.getItem(STORAGE_KEYS.ARCHIVED_STORIES);
-                if (localArchivedS) {
-                  try {
-                    JSON.parse(localArchivedS).forEach((s: Story) => activeArchivedStoryIds.add(s.id));
-                  } catch {}
-                }
               }
 
               const activeUser = currentUserRef.current;
@@ -647,9 +651,22 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   if (activeUser && !DUMMY_IDS.has(activeUser.id)) {
                     map.set(activeUser.id, activeUser);
                   }
-                  return Array.from(map.values());
+                  const merged = Array.from(map.values());
+                  if (
+                    prev.length === merged.length &&
+                    prev.every(
+                      (u, i) =>
+                        u.id === merged[i].id &&
+                        u.followersCount === merged[i].followersCount &&
+                        u.isFollowing === merged[i].isFollowing
+                    )
+                  ) {
+                    return prev;
+                  }
+                  return merged;
                 });
               }
+
               const curLikedSet = new Set<string>();
               const curRepostedSet = new Set<string>();
               if (curUid) {
@@ -667,22 +684,30 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
                   });
                 }
-                try {
-                  const localL = JSON.parse(localStorage.getItem(`velo_user_likes_${curUid}`) || '[]');
-                  if (Array.isArray(localL)) localL.forEach((id: string) => curLikedSet.add(id));
-                  const localR = JSON.parse(localStorage.getItem(`velo_user_reposts_${curUid}`) || '[]');
-                  if (Array.isArray(localR)) localR.forEach((id: string) => curRepostedSet.add(id));
-                } catch {}
               }
 
               if (server.comments && typeof server.comments === 'object') {
-                setComments(server.comments);
+                setComments((prev) => {
+                  const pKeys = Object.keys(prev);
+                  const sKeys = Object.keys(server.comments);
+                  if (pKeys.length === sKeys.length) {
+                    const isSame = pKeys.every(
+                      (k) => (prev[k]?.length || 0) === (server.comments[k]?.length || 0)
+                    );
+                    if (isSame) return prev;
+                  }
+                  return server.comments;
+                });
               }
 
-              if (server.posts) {
+              if (server.posts && Array.isArray(server.posts)) {
                 const cleanPosts = (server.posts as Post[])
                   .filter(
-                    (p) => !DUMMY_IDS.has(p.id) && !DUMMY_IDS.has(p.authorId) && !p.isArchived && !activeArchivedPostIds.has(p.id)
+                    (p) =>
+                      !DUMMY_IDS.has(p.id) &&
+                      !DUMMY_IDS.has(p.authorId) &&
+                      !p.isArchived &&
+                      !activeArchivedPostIds.has(p.id)
                   )
                   .map((p) => {
                     const isLiked = curUid ? curLikedSet.has(p.id) : false;
@@ -707,6 +732,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                       commentsCount,
                     };
                   });
+
                 setPosts((prev) => {
                   if (prev.length === cleanPosts.length) {
                     const isIdentical = prev.every(
@@ -722,9 +748,14 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   return cleanPosts;
                 });
               }
-              if (server.stories) {
+
+              if (server.stories && Array.isArray(server.stories)) {
                 const cleanStories = (server.stories as Story[]).filter(
-                  (s) => !DUMMY_IDS.has(s.id) && !DUMMY_IDS.has(s.authorId) && !s.isArchived && !activeArchivedStoryIds.has(s.id)
+                  (s) =>
+                    !DUMMY_IDS.has(s.id) &&
+                    !DUMMY_IDS.has(s.authorId) &&
+                    !s.isArchived &&
+                    !activeArchivedStoryIds.has(s.id)
                 );
                 setStories((prev) => {
                   if (prev.length === cleanStories.length) {
@@ -734,6 +765,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   return cleanStories;
                 });
               }
+
               if (server.conversations && Array.isArray(server.conversations)) {
                 const mappedConvs = mapServerConversations(
                   server.conversations,
@@ -751,7 +783,6 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     );
                     if (isIdentical) return prev;
                   }
-                  safeLocalStorageSet(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(mappedConvs));
                   return mappedConvs;
                 });
               }
@@ -766,23 +797,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     );
                     if (isSame) return prev;
                   }
-                  safeLocalStorageSet(STORAGE_KEYS.MESSAGES, JSON.stringify(server.messages));
                   return server.messages;
-                });
-              }
-
-              if (server.comments && typeof server.comments === 'object') {
-                setComments((prev) => {
-                  const pKeys = Object.keys(prev);
-                  const sKeys = Object.keys(server.comments);
-                  if (pKeys.length === sKeys.length) {
-                    const isSame = pKeys.every(
-                      (k) => (prev[k]?.length || 0) === (server.comments[k]?.length || 0)
-                    );
-                    if (isSame) return prev;
-                  }
-                  safeLocalStorageSet(STORAGE_KEYS.COMMENTS, JSON.stringify(server.comments));
-                  return server.comments;
                 });
               }
 
@@ -790,11 +805,14 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setActivities((prev) => {
                   if (
                     prev.length === server.activities.length &&
-                    prev[0]?.id === server.activities[0]?.id
+                    prev.every(
+                      (a, i) =>
+                        a.id === server.activities[i]?.id &&
+                        a.isRead === server.activities[i]?.isRead
+                    )
                   ) {
                     return prev;
                   }
-                  safeLocalStorageSet(STORAGE_KEYS.ACTIVITIES, JSON.stringify(server.activities));
                   return server.activities;
                 });
               }
@@ -805,7 +823,6 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   if (prev.length === followers.length && prev.every((f, i) => f === followers[i])) {
                     return prev;
                   }
-                  safeLocalStorageSet(`velo_followers_${activeUser.id}`, JSON.stringify(followers));
                   return followers;
                 });
 
@@ -819,15 +836,17 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   if (prev.length === followings.length && prev.every((f, i) => f === followings[i])) {
                     return prev;
                   }
-                  safeLocalStorageSet(`velo_following_${activeUser.id}`, JSON.stringify(followings));
                   return followings;
                 });
               }
             }
           })
-          .catch(() => {});
+          .catch(() => {})
+          .finally(() => {
+            isFetchingRef.current = false;
+          });
       }
-    }, 2500);
+    }, 8000);
 
     return () => clearInterval(interval);
   }, []);

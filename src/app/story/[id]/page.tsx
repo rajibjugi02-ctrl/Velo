@@ -145,7 +145,11 @@ export default function StoryViewerPage() {
       }
 
       return () => {
-        audio.pause();
+        try {
+          audio.pause();
+          audio.removeAttribute('src');
+          audio.load();
+        } catch {}
         audioRef.current = null;
       };
     }

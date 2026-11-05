@@ -22,7 +22,7 @@ export const MobileHeader: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-black/80 backdrop-blur-2xl border-b border-zinc-200 dark:border-white/[0.08] select-none transition-colors duration-300">
+    <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 py-3 bg-white/90 dark:bg-black/90 backdrop-blur-lg border-b border-zinc-200 dark:border-white/[0.08] select-none transition-colors duration-300">
       <Link href="/feed" className="flex items-center">
         <Logo size={32} showText={true} />
       </Link>
@@ -79,8 +79,8 @@ export const MobileBottomNav: React.FC = () => {
   );
 
   return (
-    <nav className="md:hidden fixed bottom-3 left-4 right-4 z-50 select-none pb-safe">
-      <div className="relative grid grid-cols-6 max-w-md mx-auto p-1.5 rounded-full bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl border border-zinc-200/80 dark:border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.2)]">
+    <nav className="md:hidden fixed bottom-3 left-4 right-4 z-50 select-none pb-safe pointer-events-none">
+      <div className="relative pointer-events-auto grid grid-cols-6 max-w-md mx-auto p-1.5 rounded-full bg-white/95 dark:bg-zinc-900/95 backdrop-blur-lg border border-zinc-200/80 dark:border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.2)]">
         {/* Hardware-accelerated sliding indicator for silky smooth 60fps translation */}
         <div
           style={{

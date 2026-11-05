@@ -145,48 +145,25 @@ export async function getMediaUrl(keyOrUrl: string): Promise<string> {
 }
 
 /**
- * Safe localStorage setter that never throws QuotaExceededError.
+ * Safe localStorage setter that never throws QuotaExceededError or chokes Safari memory.
  */
 export function safeLocalStorageSet(key: string, value: string): boolean {
   if (typeof window === 'undefined') return false;
+  // Guard against massive payloads (>800KB) that crash Safari WebKit
+  if (value.length > 800000) {
+    return false;
+  }
   try {
     localStorage.setItem(key, value);
     return true;
   } catch (e: any) {
-    if (e.name === 'QuotaExceededError' || e.code === 22) {
-      console.warn(`localStorage quota exceeded for key "${key}". Trimming cached media...`);
-      try {
-        localStorage.removeItem('velo_pending_users');
-        localStorage.setItem(key, value);
-        return true;
-      } catch {
-        try {
-          const parsed = JSON.parse(value);
-          if (Array.isArray(parsed)) {
-            // Retain recent items and strip large base64/blobs from older items
-            const trimmed = parsed.slice(0, 20).map((item: any, idx: number) => {
-              if (idx > 3) {
-                if (item.mediaUrl && item.mediaUrl.length > 5000) {
-                  return { ...item, mediaUrl: '' };
-                }
-                if (item.media && Array.isArray(item.media)) {
-                  return {
-                    ...item,
-                    media: item.media.map((m: any) =>
-                      m.url && m.url.length > 5000 ? { ...m, url: '' } : m
-                    ),
-                  };
-                }
-              }
-              return item;
-            });
-            localStorage.setItem(key, JSON.stringify(trimmed));
-            return true;
-          }
-        } catch {}
-      }
+    try {
+      localStorage.removeItem('velo_pending_users');
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      return false;
     }
-    return false;
   }
 }
 
