@@ -189,6 +189,30 @@ export async function POST(req: Request) {
         break;
       }
 
+      case 'TOGGLE_LIKE_COMMENT': {
+        const { postId, commentId } = payload;
+        if (postId && commentId && db.comments && db.comments[postId]) {
+          const updateComments = (list: any[]): any[] => {
+            return list.map((c) => {
+              if (c.id === commentId) {
+                const isLiked = !c.isLiked;
+                return {
+                  ...c,
+                  isLiked,
+                  likesCount: isLiked ? (c.likesCount || 0) + 1 : Math.max(0, (c.likesCount || 1) - 1),
+                };
+              }
+              if (c.replies && c.replies.length > 0) {
+                return { ...c, replies: updateComments(c.replies) };
+              }
+              return c;
+            });
+          };
+          db.comments[postId] = updateComments(db.comments[postId]);
+        }
+        break;
+      }
+
       case 'ADD_STORY': {
         const story: Story = payload.story;
         if (story && story.id) {
@@ -271,18 +295,54 @@ export async function POST(req: Request) {
         break;
       }
 
+      case 'CREATE_CONVERSATION': {
+        const { conversationId, participantIds } = payload;
+        if (conversationId) {
+          if (!db.conversations) db.conversations = [];
+          const existing = db.conversations.find((c) => c.id === conversationId);
+          if (!existing) {
+            db.conversations.unshift({
+              id: conversationId,
+              participantIds: participantIds || [],
+              unreadCount: 0,
+            } as any);
+          }
+        }
+        break;
+      }
+
       case 'SEND_MESSAGE': {
-        const { conversationId, message } = payload;
+        const { conversationId, message, participantIds } = payload;
         if (conversationId && message) {
+          if (!db.messages) db.messages = {};
           if (!db.messages[conversationId]) {
             db.messages[conversationId] = [];
           }
-          db.messages[conversationId].push(message);
+          if (!db.messages[conversationId].some((m) => m.id === message.id)) {
+            db.messages[conversationId].push(message);
+          }
 
-          // Update conversation's last message
-          const conv = db.conversations.find((c) => c.id === conversationId);
+          if (!db.conversations) db.conversations = [];
+          let conv = db.conversations.find((c) => c.id === conversationId);
+          const pIds =
+            participantIds ||
+            (conv as any)?.participantIds ||
+            (conversationId.startsWith('conv_')
+              ? conversationId.replace('conv_', '').split('_')
+              : [message.senderId].filter(Boolean));
+
           if (conv) {
             conv.lastMessage = message;
+            if (!(conv as any).participantIds || (conv as any).participantIds.length === 0) {
+              (conv as any).participantIds = pIds;
+            }
+          } else {
+            db.conversations.unshift({
+              id: conversationId,
+              participantIds: pIds,
+              lastMessage: message,
+              unreadCount: 0,
+            } as any);
           }
         }
         break;

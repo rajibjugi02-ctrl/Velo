@@ -32,7 +32,7 @@ interface PostCardProps {
   isDetailView?: boolean;
 }
 
-export const PostCard: React.FC<PostCardProps> = ({ post, isDetailView = false }) => {
+const PostCardComponent: React.FC<PostCardProps> = ({ post, isDetailView = false }) => {
   const router = useRouter();
   const {
     currentUser,
@@ -555,3 +555,5 @@ export const PostCard: React.FC<PostCardProps> = ({ post, isDetailView = false }
     </article>
   );
 };
+
+export const PostCard = React.memo(PostCardComponent);

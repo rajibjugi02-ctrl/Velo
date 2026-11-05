@@ -256,7 +256,7 @@ export default function ActivityPage() {
             </div>
           ) : (
             followersList.map((user) => {
-              const isMutual = !!user.isMutual || !!user.isFollowing;
+              const isMutual = !!user.isMutual || !!user.isFollowing || followersIds.includes(user.id);
 
               return (
                 <div

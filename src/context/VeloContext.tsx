@@ -110,6 +110,7 @@ interface VeloContextType {
   unmuteUser: (userId: string) => void;
 
   // Messages & Chat Interactions
+  getOrCreateConversation: (targetUserId: string) => Conversation | null;
   sendMessage: (
     conversationId: string,
     messageData: {
@@ -255,6 +256,10 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const allUsersRef = useRef<User[]>(allUsers);
+  useEffect(() => {
+    allUsersRef.current = allUsers;
+  }, [allUsers]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [archivedPosts, setArchivedPosts] = useState<Post[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
@@ -268,6 +273,43 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     chatBubbleColor: 'zinc-dark',
   });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const mapServerConversations = (
+    serverConvs: any[],
+    activeUser: User | null,
+    allUserList: User[]
+  ): Conversation[] => {
+    if (!activeUser || !Array.isArray(serverConvs)) return [];
+    const mapped: Conversation[] = [];
+    const seen = new Set<string>();
+
+    serverConvs.forEach((sc: any) => {
+      const pIds: string[] =
+        sc.participantIds ||
+        (typeof sc.id === 'string' && sc.id.startsWith('conv_')
+          ? sc.id.replace('conv_', '').split('_')
+          : []);
+
+      if (pIds.includes(activeUser.id) || (sc.participant && sc.participant.id !== activeUser.id)) {
+        const otherId = pIds.find((id) => id !== activeUser.id) || sc.participant?.id;
+        const otherUser = allUserList.find((u) => u.id === otherId) || sc.participant;
+
+        if (otherUser && !DUMMY_IDS.has(otherUser.id) && !seen.has(sc.id)) {
+          seen.add(sc.id);
+          mapped.push({
+            id: sc.id,
+            participant: otherUser,
+            participantIds: pIds,
+            customNickname: sc.customNickname,
+            lastMessage: sc.lastMessage,
+            unreadCount: sc.unreadCount || 0,
+          });
+        }
+      }
+    });
+
+    return mapped;
+  };
 
   useEffect(() => {
     try {
@@ -510,10 +552,13 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
               safeLocalStorageSet(STORAGE_KEYS.STORIES, JSON.stringify(cleanStories));
             }
             if (server.conversations && Array.isArray(server.conversations)) {
-              const cleanConvs = (server.conversations as Conversation[]).filter(
-                (c) => !DUMMY_IDS.has(c.id) && !DUMMY_IDS.has(c.participant?.id)
+              const mappedConvs = mapServerConversations(
+                server.conversations,
+                activeUser,
+                allUsersRef.current
               );
-              setConversations(cleanConvs);
+              setConversations(mappedConvs);
+              safeLocalStorageSet(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(mappedConvs));
             }
             if (server.messages) {
               setMessages(server.messages);
@@ -684,17 +729,80 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   return cleanStories;
                 });
               }
+              if (server.conversations && Array.isArray(server.conversations)) {
+                const mappedConvs = mapServerConversations(
+                  server.conversations,
+                  activeUser,
+                  allUsersRef.current
+                );
+                setConversations((prev) => {
+                  if (prev.length === mappedConvs.length) {
+                    const isIdentical = prev.every(
+                      (c, i) =>
+                        c.id === mappedConvs[i].id &&
+                        c.lastMessage?.id === mappedConvs[i].lastMessage?.id &&
+                        c.lastMessage?.text === mappedConvs[i].lastMessage?.text &&
+                        c.unreadCount === mappedConvs[i].unreadCount
+                    );
+                    if (isIdentical) return prev;
+                  }
+                  safeLocalStorageSet(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(mappedConvs));
+                  return mappedConvs;
+                });
+              }
+
               if (server.messages) {
-                setMessages(server.messages);
+                setMessages((prev) => {
+                  const prevKeys = Object.keys(prev);
+                  const serverKeys = Object.keys(server.messages);
+                  if (prevKeys.length === serverKeys.length) {
+                    const isSame = prevKeys.every(
+                      (k) => (prev[k]?.length || 0) === (server.messages[k]?.length || 0)
+                    );
+                    if (isSame) return prev;
+                  }
+                  safeLocalStorageSet(STORAGE_KEYS.MESSAGES, JSON.stringify(server.messages));
+                  return server.messages;
+                });
               }
+
+              if (server.comments && typeof server.comments === 'object') {
+                setComments((prev) => {
+                  const pKeys = Object.keys(prev);
+                  const sKeys = Object.keys(server.comments);
+                  if (pKeys.length === sKeys.length) {
+                    const isSame = pKeys.every(
+                      (k) => (prev[k]?.length || 0) === (server.comments[k]?.length || 0)
+                    );
+                    if (isSame) return prev;
+                  }
+                  safeLocalStorageSet(STORAGE_KEYS.COMMENTS, JSON.stringify(server.comments));
+                  return server.comments;
+                });
+              }
+
               if (server.activities && Array.isArray(server.activities)) {
-                setActivities(server.activities);
-                safeLocalStorageSet(STORAGE_KEYS.ACTIVITIES, JSON.stringify(server.activities));
+                setActivities((prev) => {
+                  if (
+                    prev.length === server.activities.length &&
+                    prev[0]?.id === server.activities[0]?.id
+                  ) {
+                    return prev;
+                  }
+                  safeLocalStorageSet(STORAGE_KEYS.ACTIVITIES, JSON.stringify(server.activities));
+                  return server.activities;
+                });
               }
+
               if (server.follows && activeUser) {
                 const followers = server.follows[activeUser.id] || [];
-                setFollowersIds(followers);
-                safeLocalStorageSet(`velo_followers_${activeUser.id}`, JSON.stringify(followers));
+                setFollowersIds((prev) => {
+                  if (prev.length === followers.length && prev.every((f, i) => f === followers[i])) {
+                    return prev;
+                  }
+                  safeLocalStorageSet(`velo_followers_${activeUser.id}`, JSON.stringify(followers));
+                  return followers;
+                });
 
                 const followings: string[] = [];
                 Object.entries(server.follows).forEach(([targetId, fList]) => {
@@ -702,8 +810,13 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     followings.push(targetId);
                   }
                 });
-                setFollowingIds(followings);
-                safeLocalStorageSet(`velo_following_${activeUser.id}`, JSON.stringify(followings));
+                setFollowingIds((prev) => {
+                  if (prev.length === followings.length && prev.every((f, i) => f === followings[i])) {
+                    return prev;
+                  }
+                  safeLocalStorageSet(`velo_following_${activeUser.id}`, JSON.stringify(followings));
+                  return followings;
+                });
               }
             }
           })
@@ -1349,6 +1462,44 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Messages & Reactions & Edit & Delete
+  const getOrCreateConversation = (targetUserId: string): Conversation | null => {
+    const activeUser = currentUserRef.current;
+    if (!activeUser || activeUser.id === targetUserId) return null;
+
+    const convId = ['conv', ...[activeUser.id, targetUserId].sort()].join('_');
+    const existing = conversations.find(
+      (c) =>
+        c.id === convId ||
+        c.participant.id === targetUserId ||
+        (c.participantIds && c.participantIds.includes(targetUserId))
+    );
+    if (existing) return existing;
+
+    const targetUser = allUsersRef.current.find((u) => u.id === targetUserId);
+    if (!targetUser) return null;
+
+    const newConv: Conversation = {
+      id: convId,
+      participant: targetUser,
+      participantIds: [activeUser.id, targetUserId],
+      unreadCount: 0,
+    };
+
+    setConversations((prev) => {
+      const filtered = prev.filter((c) => c.id !== convId);
+      const next = [newConv, ...filtered];
+      safeLocalStorageSet(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(next));
+      return next;
+    });
+
+    syncToServer('CREATE_CONVERSATION', {
+      conversationId: convId,
+      participantIds: [activeUser.id, targetUserId],
+    });
+
+    return newConv;
+  };
+
   const sendMessage = (
     conversationId: string,
     messageData: {
@@ -1390,7 +1541,19 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         c.id === conversationId ? { ...c, lastMessage: newMsg, unreadCount: 0 } : c
       )
     );
-    syncToServer('SEND_MESSAGE', { conversationId, message: newMsg });
+
+    const conv = conversations.find((c) => c.id === conversationId);
+    const pIds =
+      conv?.participantIds ||
+      (conversationId.startsWith('conv_')
+        ? conversationId.replace('conv_', '').split('_')
+        : [currentUser.id]);
+
+    syncToServer('SEND_MESSAGE', {
+      conversationId,
+      message: newMsg,
+      participantIds: pIds,
+    });
   };
 
   const toggleMessageReaction = (conversationId: string, messageId: string, emoji: string) => {
@@ -1523,11 +1686,18 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (a) => a.recipientId === currentUser?.id
   );
 
-  // User-scoped conversations: only usr_me gets default demo chats; new accounts start with clean inbox (zero dummy unread badges)
-  const activeUserConversations =
-    currentUser?.id === 'usr_me'
-      ? conversations
-      : conversations.filter((c) => (c as any).ownerId === currentUser?.id);
+  // User-scoped conversations: conversations that belong to or involve currentUser
+  const activeUserConversations = conversations.filter((c) => {
+    if (!currentUser) return false;
+    if (c.participantIds && Array.isArray(c.participantIds)) {
+      return c.participantIds.includes(currentUser.id);
+    }
+    if (c.id.startsWith('conv_')) {
+      const parts = c.id.replace('conv_', '').split('_');
+      return parts.includes(currentUser.id);
+    }
+    return c.participant && c.participant.id !== currentUser.id;
+  });
 
   // Guarantee isFollowing and isMutual reflect real-time active user state
   const computedAllUsers = allUsers.map((u) => {
@@ -1588,6 +1758,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         unblockUser,
         muteUser,
         unmuteUser,
+        getOrCreateConversation,
         sendMessage,
         toggleMessageReaction,
         editMessage,

@@ -141,6 +141,7 @@ export interface Message {
 export interface Conversation {
   id: string;
   participant: User;
+  participantIds?: string[];
   customNickname?: string;
   lastMessage?: Message;
   unreadCount: number;
