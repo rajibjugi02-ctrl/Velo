@@ -48,6 +48,7 @@ interface VeloContextType {
   archivedStories: Story[];
   conversations: Conversation[];
   messages: Record<string, Message[]>;
+  customNicknames: Record<string, string>;
   comments: Record<string, Comment[]>;
   activities: Activity[];
   settings: VeloSettings;
@@ -127,7 +128,8 @@ interface VeloContextType {
   editMessage: (conversationId: string, messageId: string, newText: string) => void;
   deleteMessageForMe: (conversationId: string, messageId: string) => void;
   deleteMessageForEveryone: (conversationId: string, messageId: string) => void;
-  setContactNickname: (conversationId: string, nickname: string) => void;
+  setContactNickname: (peerIdOrConvId: string, nickname: string) => void;
+  markMessagesAsRead: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => void;
   clearConversationMessages: (conversationId: string) => void;
 
@@ -190,7 +192,7 @@ async function syncToServer(action: string, payload: any) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, payload }),
     });
-  } catch {}
+  } catch { }
 }
 
 export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -203,7 +205,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const parsed = JSON.parse(stored);
           if (parsed && !DUMMY_IDS.has(parsed.id)) return parsed;
         }
-      } catch {}
+      } catch { }
     }
     return null;
   });
@@ -223,7 +225,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (stored) return JSON.parse(stored);
           return [];
         }
-      } catch {}
+      } catch { }
     }
     return [];
   });
@@ -238,7 +240,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (stored) return JSON.parse(stored);
           return [];
         }
-      } catch {}
+      } catch { }
     }
     return [];
   });
@@ -255,7 +257,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const cleaned = parsed.filter((u) => !DUMMY_IDS.has(u.id));
           return cleaned.slice(0, 3);
         }
-      } catch {}
+      } catch { }
     }
     return [];
   });
@@ -272,6 +274,19 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [archivedStories, setArchivedStories] = useState<Story[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
+  const [customNicknames, setCustomNicknames] = useState<Record<string, string>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const storedUser = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+        if (storedUser) {
+          const u = JSON.parse(storedUser);
+          const n = localStorage.getItem(`velo_nicknames_${u.id}`);
+          if (n) return JSON.parse(n);
+        }
+      } catch {}
+    }
+    return {};
+  });
   const [comments, setComments] = useState<Record<string, Comment[]>>({});
   const [activities, setActivities] = useState<Activity[]>([]);
   const [settings, setSettings] = useState<VeloSettings>({
@@ -290,22 +305,50 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const seen = new Set<string>();
 
     serverConvs.forEach((sc: any) => {
-      const pIds: string[] =
-        sc.participantIds ||
-        (typeof sc.id === 'string' && sc.id.startsWith('conv_')
+      let pIds: string[] =
+        Array.isArray(sc.participantIds) && sc.participantIds.length > 0
+          ? sc.participantIds
+          : typeof sc.id === 'string' && sc.id.startsWith('conv_')
           ? sc.id.replace('conv_', '').split('_')
-          : []);
+          : [];
 
+      // Only process conversations where the active user is a participant
       if (pIds.includes(activeUser.id) || (sc.participant && sc.participant.id !== activeUser.id)) {
-        const otherId = pIds.find((id) => id !== activeUser.id) || sc.participant?.id;
-        const otherUser = allUserList.find((u) => u.id === otherId) || sc.participant;
+        // Resolve peer ID - MUST strictly not be the active user
+        const otherId =
+          pIds.find((id) => id !== activeUser.id) ||
+          (sc.participant?.id !== activeUser.id ? sc.participant?.id : null);
+
+        if (!otherId || otherId === activeUser.id) return;
+
+        let otherUser = allUserList.find((u) => u.id === otherId);
+        if (!otherUser && sc.participant && sc.participant.id === otherId) {
+          otherUser = sc.participant;
+        }
+
+        // Resilient fallback: ensure conversation is visible even during initial user sync
+        if (!otherUser) {
+          otherUser = {
+            id: otherId,
+            username: otherId,
+            fullName: 'User',
+            avatar: '/default-avatar.png',
+            bio: '',
+            followersCount: 0,
+            followingCount: 0,
+            postsCount: 0,
+            onlineStatus: 'offline',
+            isPrivate: false,
+            createdAt: new Date().toISOString(),
+          } as unknown as User;
+        }
 
         if (otherUser && !DUMMY_IDS.has(otherUser.id) && !seen.has(sc.id)) {
           seen.add(sc.id);
           mapped.push({
             id: sc.id,
             participant: otherUser,
-            participantIds: pIds,
+            participantIds: pIds.length > 0 ? pIds : [activeUser.id, otherId],
             customNickname: sc.customNickname,
             lastMessage: sc.lastMessage,
             unreadCount: sc.unreadCount || 0,
@@ -348,6 +391,13 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           setFollowersIds([]);
         }
+
+        const storedNicknames = localStorage.getItem(`velo_nicknames_${activeUser.id}`);
+        if (storedNicknames) {
+          try {
+            setCustomNicknames(JSON.parse(storedNicknames));
+          } catch {}
+        }
       }
 
       const storedAccounts = localStorage.getItem(STORAGE_KEYS.SAVED_ACCOUNTS);
@@ -361,7 +411,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const finalAccounts = cleaned.slice(0, 3);
           setSavedAccounts(finalAccounts);
           safeLocalStorageSet(STORAGE_KEYS.SAVED_ACCOUNTS, JSON.stringify(finalAccounts));
-        } catch {}
+        } catch { }
       }
 
       // Purge and load real local data
@@ -378,7 +428,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const parsed: Post[] = JSON.parse(storedArchivedPosts);
           setArchivedPosts(parsed);
-        } catch {}
+        } catch { }
       }
 
       const storedStories = localStorage.getItem(STORAGE_KEYS.STORIES);
@@ -394,7 +444,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const parsed: Story[] = JSON.parse(storedArchivedStories);
           setArchivedStories(parsed);
-        } catch {}
+        } catch { }
       }
 
       const storedUsers = localStorage.getItem(STORAGE_KEYS.ALL_USERS);
@@ -420,7 +470,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (storedActivities) {
         try {
           setActivities(JSON.parse(storedActivities));
-        } catch {}
+        } catch { }
       }
 
       // Fetch centralized database from server API (/api/data)
@@ -470,7 +520,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (localArchived) {
                 try {
                   JSON.parse(localArchived).forEach((p: Post) => activeArchivedPostIds.add(p.id));
-                } catch {}
+                } catch { }
               }
             }
 
@@ -484,7 +534,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (localArchivedS) {
                 try {
                   JSON.parse(localArchivedS).forEach((s: Story) => activeArchivedStoryIds.add(s.id));
-                } catch {}
+                } catch { }
               }
             }
 
@@ -511,7 +561,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (Array.isArray(localL)) localL.forEach((id: string) => userLikedSet.add(id));
                 const localR = JSON.parse(localStorage.getItem(`velo_user_reposts_${userUid}`) || '[]');
                 if (Array.isArray(localR)) localR.forEach((id: string) => userRepostedSet.add(id));
-              } catch {}
+              } catch { }
             }
 
             if (server.comments && typeof server.comments === 'object') {
@@ -590,7 +640,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
             }
           }
-        } catch {}
+        } catch { }
       };
 
       pullServerData();
@@ -841,7 +891,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
             }
           })
-          .catch(() => {})
+          .catch(() => { })
           .finally(() => {
             isFetchingRef.current = false;
           });
@@ -883,8 +933,8 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (isCustomUser) {
         setFollowersIds([]);
       }
-    } catch {}
-    
+    } catch { }
+
     // Guarantee user is in allUsers state AND persistent storage
     setAllUsers((prev) => {
       const exists = prev.some(
@@ -956,7 +1006,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setFollowingIds(storedFollowing ? JSON.parse(storedFollowing) : []);
         const storedFollowers = localStorage.getItem(`velo_followers_${target.id}`);
         setFollowersIds(storedFollowers ? JSON.parse(storedFollowers) : []);
-      } catch {}
+      } catch { }
       showToast(`Switched account to @${target.username}`, 'success');
     }
   };
@@ -1083,7 +1133,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let userLikes: string[] = [];
     try {
       userLikes = JSON.parse(localStorage.getItem(localLikesKey) || '[]');
-    } catch {}
+    } catch { }
 
     let isNowLiked = false;
     setPosts((prev) =>
@@ -1131,7 +1181,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let userReposts: string[] = [];
     try {
       userReposts = JSON.parse(localStorage.getItem(localRepostsKey) || '[]');
-    } catch {}
+    } catch { }
 
     let isNowReposted = false;
     setPosts((prev) =>
@@ -1556,7 +1606,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Messages & Reactions & Edit & Delete
-  const getOrCreateConversation = (targetUserId: string): Conversation | null => {
+  const getOrCreateConversation = useCallback((targetUserId: string): Conversation | null => {
     const activeUser = currentUserRef.current;
     if (!activeUser || activeUser.id === targetUserId) return null;
 
@@ -1592,7 +1642,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return newConv;
-  };
+  }, [conversations]);
 
   const sendMessage = (
     conversationId: string,
@@ -1617,7 +1667,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       linkPreview: messageData.linkPreview,
       voiceNote: messageData.voiceNote,
       createdAt: new Date().toISOString(),
-      read: true,
+      read: false,
       reactions: {},
     };
 
@@ -1730,12 +1780,58 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     showToast('Deleted for everyone', 'info');
   };
 
-  const setContactNickname = (conversationId: string, nickname: string) => {
+  const setContactNickname = useCallback((peerIdOrConvId: string, nickname: string) => {
+    const activeUser = currentUserRef.current;
+    if (!activeUser) return;
+    const trimmed = nickname.trim();
+
+    let peerId = peerIdOrConvId;
+    if (peerId.startsWith('conv_')) {
+      const pIds = peerId.replace('conv_', '').split('_');
+      peerId = pIds.find((id) => id !== activeUser.id) || peerId;
+    }
+
+    setCustomNicknames((prev) => {
+      const updated = { ...prev, [peerId]: trimmed };
+      safeLocalStorageSet(`velo_nicknames_${activeUser.id}`, JSON.stringify(updated));
+      return updated;
+    });
+
     setConversations((prev) =>
-      prev.map((c) => (c.id === conversationId ? { ...c, customNickname: nickname } : c))
+      prev.map((c) => {
+        const pIds = c.participantIds || (c.id.startsWith('conv_') ? c.id.replace('conv_', '').split('_') : []);
+        if (pIds.includes(peerId) || c.participant?.id === peerId) {
+          return { ...c, customNickname: trimmed || undefined };
+        }
+        return c;
+      })
     );
-    showToast('Nickname updated', 'success');
-  };
+    showToast('Contact nickname updated', 'success');
+  }, []);
+
+  const markMessagesAsRead = useCallback((conversationId: string) => {
+    const activeUser = currentUserRef.current;
+    if (!activeUser || !conversationId) return;
+
+    let hasUnread = false;
+    setMessages((prev) => {
+      const convMsgs = prev[conversationId] || [];
+      const needsUpdate = convMsgs.some((m) => m.senderId !== activeUser.id && !m.read);
+      if (!needsUpdate) return prev;
+      hasUnread = true;
+      const updated = convMsgs.map((m) => (m.senderId !== activeUser.id ? { ...m, read: true } : m));
+      const next = { ...prev, [conversationId]: updated };
+      safeLocalStorageSet(STORAGE_KEYS.MESSAGES, JSON.stringify(next));
+      return next;
+    });
+
+    if (hasUnread) {
+      setConversations((prev) =>
+        prev.map((c) => (c.id === conversationId ? { ...c, unreadCount: 0 } : c))
+      );
+      syncToServer('MARK_MESSAGES_READ', { conversationId, readerId: activeUser.id });
+    }
+  }, []);
 
   const deleteConversation = (conversationId: string) => {
     setConversations((prev) => prev.filter((c) => c.id !== conversationId));
@@ -1847,6 +1943,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         archivedStories,
         conversations: activeUserConversations,
         messages,
+        customNicknames,
         comments,
         activities: activeUserActivities,
         settings,
@@ -1888,6 +1985,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteMessageForMe,
         deleteMessageForEveryone,
         setContactNickname,
+        markMessagesAsRead,
         deleteConversation,
         clearConversationMessages,
         markActivityAsRead,

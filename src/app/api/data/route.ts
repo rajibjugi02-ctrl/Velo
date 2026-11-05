@@ -348,6 +348,16 @@ export async function POST(req: Request) {
         break;
       }
 
+      case 'MARK_MESSAGES_READ': {
+        const { conversationId, readerId } = payload;
+        if (conversationId && readerId && db.messages && db.messages[conversationId]) {
+          db.messages[conversationId] = db.messages[conversationId].map((m) =>
+            m.senderId !== readerId ? { ...m, read: true } : m
+          );
+        }
+        break;
+      }
+
       case 'ADD_ACTIVITY': {
         const { activity } = payload;
         if (activity && activity.id) {

@@ -29,11 +29,32 @@ export const ContactInfoDrawer: React.FC<ContactInfoDrawerProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { setContactNickname } = useVelo();
+  const { currentUser, allUsers, customNicknames, setContactNickname } = useVelo();
+
+  // Resolve peer identity dynamically
+  const pIds =
+    conversation.participantIds ||
+    (conversation.id.startsWith('conv_')
+      ? conversation.id.replace('conv_', '').split('_')
+      : []);
+  const peerId =
+    pIds.find((id) => id !== currentUser?.id) ||
+    (conversation.participant?.id !== currentUser?.id
+      ? conversation.participant?.id
+      : null);
+  const peer =
+    allUsers.find((u) => u.id === peerId) ||
+    (conversation.participant?.id === peerId
+      ? conversation.participant
+      : null) ||
+    conversation.participant;
+
   const [activeTab, setActiveTab] = useState<'media' | 'links' | 'docs'>('media');
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [nicknameInput, setNicknameInput] = useState(
-    conversation.customNickname || conversation.participant.fullName
+    customNicknames[peer.id] ||
+      conversation.customNickname ||
+      peer.fullName
   );
 
   if (!isOpen) return null;
@@ -41,7 +62,7 @@ export const ContactInfoDrawer: React.FC<ContactInfoDrawerProps> = ({
   const handleSaveNickname = (e: React.FormEvent) => {
     e.preventDefault();
     if (nicknameInput.trim()) {
-      setContactNickname(conversation.id, nicknameInput.trim());
+      setContactNickname(peer.id, nicknameInput.trim());
       setIsEditingNickname(false);
     }
   };
@@ -86,8 +107,8 @@ export const ContactInfoDrawer: React.FC<ContactInfoDrawerProps> = ({
       <div className="p-5 flex flex-col items-center text-center border-b border-zinc-200 dark:border-white/10 bg-zinc-50/50 dark:bg-white/[0.01]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={conversation.participant.avatar}
-          alt={conversation.participant.username}
+          src={peer.avatar || '/default-avatar.png'}
+          alt={peer.username}
           className="w-20 h-20 rounded-full object-cover border-2 border-zinc-200 dark:border-white/20 mb-3 shadow-lg"
         />
 
@@ -98,7 +119,7 @@ export const ContactInfoDrawer: React.FC<ContactInfoDrawerProps> = ({
               type="text"
               value={nicknameInput}
               onChange={(e) => setNicknameInput(e.target.value)}
-              className="px-2.5 py-1 rounded-xl bg-zinc-100 dark:bg-white/10 border border-zinc-200 dark:border-white/20 text-xs font-bold text-zinc-900 dark:text-white text-center focus:outline-none focus:border-zinc-400"
+              className="px-2.5 py-1 rounded-xl bg-zinc-100 dark:bg-white/10 border border-zinc-200 dark:border-white/20 text-base sm:text-xs font-bold text-zinc-900 dark:text-white text-center focus:outline-none focus:border-zinc-400"
               autoFocus
             />
             <button
@@ -111,7 +132,7 @@ export const ContactInfoDrawer: React.FC<ContactInfoDrawerProps> = ({
         ) : (
           <div className="flex items-center gap-1.5">
             <h4 className="text-base font-bold text-zinc-900 dark:text-white leading-tight">
-              {conversation.customNickname || conversation.participant.fullName}
+              {customNicknames[peer.id] || conversation.customNickname || peer.fullName}
             </h4>
             <button
               onClick={() => setIsEditingNickname(true)}
@@ -124,14 +145,14 @@ export const ContactInfoDrawer: React.FC<ContactInfoDrawerProps> = ({
         )}
 
         <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-          @{conversation.participant.username}
+          @{peer.username}
         </p>
         <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2 line-clamp-2 px-2">
-          {conversation.participant.bio}
+          {peer.bio}
         </p>
 
         <Link
-          href={`/profile/${conversation.participant.username}`}
+          href={`/profile/${peer.username}`}
           className="mt-3 flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-100 hover:bg-zinc-200 dark:bg-white/5 dark:hover:bg-white/10 border border-zinc-200 dark:border-white/10 text-xs font-semibold text-zinc-800 dark:text-white transition-colors"
         >
           <User className="w-3.5 h-3.5" />

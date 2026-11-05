@@ -132,7 +132,7 @@ export default function EditProfilePage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6">
+    <div className="max-w-3xl mx-auto px-4 py-6 pb-32 md:pb-8">
       {/* Header Bar */}
       <div className="flex items-center justify-between pb-4 mb-6 border-b border-zinc-200 dark:border-white/[0.08]">
         <div className="flex items-center gap-3">

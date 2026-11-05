@@ -68,6 +68,7 @@ function MessagesContent() {
     followersIds,
     conversations,
     messages,
+    customNicknames,
     getOrCreateConversation,
     sendMessage,
     toggleMessageReaction,
@@ -75,6 +76,7 @@ function MessagesContent() {
     deleteMessageForMe,
     deleteMessageForEveryone,
     setContactNickname,
+    markMessagesAsRead,
     clearConversationMessages,
     deleteConversation,
     settings,
@@ -164,19 +166,67 @@ function MessagesContent() {
     }
   }, [targetUserId, conversations, currentUser, allUsers, getOrCreateConversation]);
 
+  // Dynamically resolve the other participant (peer user) so currentUser is NEVER shown as contact
+  const getPeerUser = React.useCallback(
+    (conv: Conversation): User => {
+      if (!currentUser) return conv.participant;
+
+      const pIds =
+        conv.participantIds ||
+        (conv.id.startsWith('conv_') ? conv.id.replace('conv_', '').split('_') : []);
+
+      const peerId =
+        pIds.find((id) => id !== currentUser.id) ||
+        (conv.participant?.id !== currentUser.id ? conv.participant?.id : null);
+
+      if (peerId) {
+        const found = allUsers.find((u) => u.id === peerId);
+        if (found) return found;
+        if (conv.participant && conv.participant.id === peerId) {
+          return conv.participant;
+        }
+      }
+
+      if (conv.participant && conv.participant.id !== currentUser.id) {
+        return conv.participant;
+      }
+
+      return {
+        id: peerId || 'peer',
+        username: 'user',
+        fullName: 'Chat Contact',
+        avatar: '/default-avatar.png',
+        onlineStatus: 'offline',
+      } as unknown as User;
+    },
+    [currentUser, allUsers]
+  );
+
   // Combine active conversations with mutual connections who haven't messaged yet
   const combinedConversations = React.useMemo(() => {
     if (!currentUser) return conversations;
 
     const existingPartnerIds = new Set<string>();
-    conversations.forEach((c) => {
-      if (c.participant?.id) existingPartnerIds.add(c.participant.id);
-      if (c.participantIds && Array.isArray(c.participantIds)) {
-        c.participantIds.forEach((pid) => {
-          if (pid !== currentUser.id) existingPartnerIds.add(pid);
-        });
-      }
-    });
+
+    const normalizedConversations: Conversation[] = conversations
+      .filter((c) => {
+        const pIds =
+          c.participantIds ||
+          (c.id.startsWith('conv_') ? c.id.replace('conv_', '').split('_') : []);
+        if (pIds.length > 0 && !pIds.includes(currentUser.id)) return false;
+        return true;
+      })
+      .map((c) => {
+        const peer = getPeerUser(c);
+        existingPartnerIds.add(peer.id);
+        const customNick = customNicknames[peer.id] || c.customNickname;
+        return {
+          ...c,
+          participant: peer,
+          participantIds: c.participantIds || [currentUser.id, peer.id],
+          customNickname: customNick,
+        };
+      });
 
     const mutualConnections: Conversation[] = allUsers
       .filter((u) => {
@@ -185,18 +235,23 @@ function MessagesContent() {
         const followsMe = followersIds.includes(u.id);
         return (isFollowedByMe && followsMe) || !!u.isMutual;
       })
-      .map((u) => ({
-        id: `conv_${[currentUser.id, u.id].sort().join('_')}`,
-        participant: u,
-        participantIds: [currentUser.id, u.id],
-        unreadCount: 0,
-        lastMessage: undefined,
-      }));
+      .map((u) => {
+        const customNick = customNicknames[u.id];
+        return {
+          id: `conv_${[currentUser.id, u.id].sort().join('_')}`,
+          participant: u,
+          participantIds: [currentUser.id, u.id],
+          customNickname: customNick,
+          unreadCount: 0,
+          lastMessage: undefined,
+        };
+      });
 
-    return [...conversations, ...mutualConnections];
-  }, [conversations, allUsers, currentUser, followingIds, followersIds]);
+    return [...normalizedConversations, ...mutualConnections];
+  }, [conversations, allUsers, currentUser, followingIds, followersIds, getPeerUser, customNicknames]);
 
   const activeConversation = combinedConversations.find((c) => c.id === activeConvId);
+  const activePeerUser = activeConversation ? getPeerUser(activeConversation) : null;
   const allActiveMessages = activeConvId ? messages[activeConvId] || [] : [];
 
   // Filter messages that have NOT been deleted for current user
@@ -205,10 +260,21 @@ function MessagesContent() {
   );
 
   useEffect(() => {
-    if (activeConversation) {
-      setNicknameInput(activeConversation.customNickname || activeConversation.participant.fullName);
+    if (activePeerUser) {
+      setNicknameInput(
+        customNicknames[activePeerUser.id] ||
+          activeConversation?.customNickname ||
+          activePeerUser.fullName
+      );
     }
-  }, [activeConversation]);
+  }, [activePeerUser, activeConversation?.customNickname, customNicknames]);
+
+  // WhatsApp-style auto mark-as-read when opening a conversation
+  useEffect(() => {
+    if (activeConvId && currentUser) {
+      markMessagesAsRead(activeConvId);
+    }
+  }, [activeConvId, activeMessages.length, currentUser, markMessagesAsRead]);
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -244,7 +310,11 @@ function MessagesContent() {
             senderName:
               replyingToMessage.senderId === currentUser?.id
                 ? 'You'
-                : activeConversation?.customNickname || activeConversation?.participant.fullName || 'User',
+                : activePeerUser
+                ? customNicknames[activePeerUser.id] ||
+                  activeConversation?.customNickname ||
+                  activePeerUser.fullName
+                : 'User',
             text: replyingToMessage.text || 'Attachment',
           }
         : undefined,
@@ -375,7 +445,7 @@ function MessagesContent() {
               value={searchContact}
               onChange={(e) => setSearchContact(e.target.value)}
               placeholder="Search conversations..."
-              className="w-full pl-9 pr-3 py-2 rounded-xl bg-white dark:bg-white/[0.05] border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none"
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-white dark:bg-white/[0.05] border border-zinc-200 dark:border-white/10 text-base sm:text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none"
             />
           </div>
         </div>
@@ -405,15 +475,42 @@ function MessagesContent() {
           ) : (
             filteredConversations.map((conv) => {
               const isActive = conv.id === activeConvId;
-              const displayName = conv.customNickname || conv.participant.fullName;
+              const peer = getPeerUser(conv);
+              const displayName =
+                customNicknames[peer.id] || conv.customNickname || peer.fullName;
+
+              // WhatsApp-style incoming unread badge count
+              const convMsgs = messages[conv.id] || [];
+              const incomingUnreadCount = convMsgs.filter(
+                (m) =>
+                  m.senderId !== currentUser?.id &&
+                  !m.read &&
+                  !(m.deletedFor || []).includes(currentUser?.id || '')
+              ).length;
+
+              // Last message preview with sender prefix
+              let lastMsgPreview = 'You are now connected • Tap to start chatting';
+              if (conv.lastMessage) {
+                const isMe = conv.lastMessage.senderId === currentUser?.id;
+                const prefix = isMe ? 'You: ' : '';
+                if (conv.lastMessage.text) {
+                  lastMsgPreview = `${prefix}${conv.lastMessage.text}`;
+                } else if (conv.lastMessage.photos?.length) {
+                  lastMsgPreview = `${prefix}📷 Photo`;
+                } else if (conv.lastMessage.voiceNote) {
+                  lastMsgPreview = `${prefix}🎤 Voice note`;
+                } else if (conv.lastMessage.document) {
+                  lastMsgPreview = `${prefix}📎 ${conv.lastMessage.document.name || 'Document'}`;
+                }
+              }
 
               return (
                 <button
                   key={conv.id}
                   onClick={() => {
                     const existing = conversations.find((c) => c.id === conv.id);
-                    if (!existing && conv.participant?.id) {
-                      const created = getOrCreateConversation(conv.participant.id);
+                    if (!existing && peer.id) {
+                      const created = getOrCreateConversation(peer.id);
                       setActiveConvId(created ? created.id : conv.id);
                     } else {
                       setActiveConvId(conv.id);
@@ -429,11 +526,11 @@ function MessagesContent() {
                   <div className="relative shrink-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={conv.participant.avatar}
-                      alt={conv.participant.username}
+                      src={peer.avatar || '/default-avatar.png'}
+                      alt={peer.username}
                       className="w-10 h-10 rounded-full object-cover border border-zinc-200 dark:border-white/10"
                     />
-                    {conv.participant.onlineStatus === 'online' && (
+                    {peer.onlineStatus === 'online' && (
                       <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-black" />
                     )}
                   </div>
@@ -450,13 +547,16 @@ function MessagesContent() {
                       )}
                     </div>
 
-                    <p className="text-xs text-zinc-500 truncate mt-0.5">
-                      {conv.lastMessage?.text ||
-                        (conv.lastMessage?.photos?.length ? 'Shared photos' : '') ||
-                        (conv.lastMessage?.voiceNote
-                          ? 'Voice note'
-                          : 'You are now connected • Tap to start chatting')}
-                    </p>
+                    <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                      <p className="text-xs text-zinc-500 truncate flex-1">
+                        {lastMsgPreview}
+                      </p>
+                      {incomingUnreadCount > 0 && (
+                        <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow-sm">
+                          {incomingUnreadCount}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               );
@@ -494,17 +594,22 @@ function MessagesContent() {
 
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={activeConversation.participant.avatar}
-                    alt={activeConversation.participant.username}
+                    src={activePeerUser?.avatar || '/default-avatar.png'}
+                    alt={activePeerUser?.username || 'user'}
                     className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-white/10 shrink-0"
                   />
 
                   <div className="min-w-0">
                     <h2 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 group-hover:underline truncate leading-tight">
-                      {activeConversation.customNickname || activeConversation.participant.fullName}
+                      {customNicknames[activePeerUser?.id || ''] ||
+                        activeConversation.customNickname ||
+                        activePeerUser?.fullName}
                     </h2>
                     <p className="text-[11px] text-zinc-400 truncate">
-                      @{activeConversation.participant.username} • Tap for contact details
+                      @{activePeerUser?.username} •{' '}
+                      {activePeerUser?.onlineStatus === 'online'
+                        ? 'Online'
+                        : 'Tap for contact details'}
                     </p>
                   </div>
                 </div>
@@ -618,11 +723,19 @@ function MessagesContent() {
                           </p>
                         )}
 
-                        {/* Footer: Timestamp & edited badge */}
-                        <div className="flex items-center justify-end gap-1 mt-1 text-[10px] opacity-60">
-                          {msg.isEdited && <span>(edited)</span>}
+                        {/* Footer: Timestamp & WhatsApp read status */}
+                        <div className="flex items-center justify-end gap-1 mt-1 text-[10px] opacity-75">
+                          {msg.isEdited && <span className="opacity-60">(edited)</span>}
                           <span>{formatTimeAgo(msg.createdAt)}</span>
-                          {isSender && <CheckCheck className="w-3 h-3" />}
+                          {isSender && (
+                            <span title={msg.read ? 'Read' : 'Delivered'}>
+                              {msg.read ? (
+                                <CheckCheck className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                              ) : (
+                                <Check className="w-3.5 h-3.5 opacity-60 shrink-0" />
+                              )}
+                            </span>
+                          )}
                         </div>
 
                         {/* Emoji Reactions Pill */}
@@ -646,7 +759,16 @@ function MessagesContent() {
                   <div className="flex items-center gap-2 truncate">
                     <Reply className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                     <span className="truncate">
-                      Replying to <b>{replyingToMessage.senderId === currentUser?.id ? 'yourself' : activeConversation.participant.fullName}</b>: {replyingToMessage.text || 'Attachment'}
+                      Replying to{' '}
+                      <b>
+                        {replyingToMessage.senderId === currentUser?.id
+                          ? 'yourself'
+                          : customNicknames[activePeerUser?.id || ''] ||
+                            activeConversation.customNickname ||
+                            activePeerUser?.fullName ||
+                            'Contact'}
+                      </b>
+                      : {replyingToMessage.text || 'Attachment'}
                     </span>
                   </div>
                   <button type="button" onClick={() => setReplyingToMessage(null)}>
@@ -774,7 +896,7 @@ function MessagesContent() {
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
                       placeholder="Type a message or paste a link..."
-                      className="flex-1 px-4 py-2.5 rounded-full bg-zinc-100 dark:bg-white/[0.05] border border-transparent focus:border-zinc-300 dark:focus:border-white/20 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 text-xs sm:text-sm focus:outline-none"
+                      className="flex-1 px-4 py-2.5 rounded-full bg-zinc-100 dark:bg-white/[0.05] border border-transparent focus:border-zinc-300 dark:focus:border-white/20 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 text-base sm:text-sm focus:outline-none"
                     />
 
                     {inputText.trim() || selectedPhotos.length > 0 || selectedDoc ? (
@@ -821,8 +943,12 @@ function MessagesContent() {
               <div className="max-w-2xl mx-auto w-full p-6 flex flex-col items-center text-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={activeConversation.participant.avatar}
-                  alt={activeConversation.participant.username}
+                  src={
+                    activePeerUser?.avatar ||
+                    activeConversation.participant.avatar ||
+                    '/default-avatar.png'
+                  }
+                  alt={activePeerUser?.username || 'user'}
                   className="w-24 h-24 rounded-full object-cover border-2 border-zinc-200 dark:border-white/10 mb-4 shadow-md"
                 />
 
@@ -830,7 +956,11 @@ function MessagesContent() {
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      setContactNickname(activeConversation.id, nicknameInput.trim());
+                      if (activePeerUser) {
+                        setContactNickname(activePeerUser.id, nicknameInput.trim());
+                      } else {
+                        setContactNickname(activeConversation.id, nicknameInput.trim());
+                      }
                       setIsEditingNickname(false);
                     }}
                     className="flex items-center gap-2 mb-2"
@@ -839,7 +969,7 @@ function MessagesContent() {
                       type="text"
                       value={nicknameInput}
                       onChange={(e) => setNicknameInput(e.target.value)}
-                      className="px-3 py-1.5 rounded-xl border border-zinc-300 dark:border-white/20 bg-zinc-100 dark:bg-zinc-900 text-sm font-semibold text-center focus:outline-none"
+                      className="px-3 py-1.5 rounded-xl border border-zinc-300 dark:border-white/20 bg-zinc-100 dark:bg-zinc-900 text-base sm:text-sm font-semibold text-center focus:outline-none"
                       autoFocus
                     />
                     <button
@@ -852,7 +982,10 @@ function MessagesContent() {
                 ) : (
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                      {activeConversation.customNickname || activeConversation.participant.fullName}
+                      {customNicknames[activePeerUser?.id || ''] ||
+                        activeConversation.customNickname ||
+                        activePeerUser?.fullName ||
+                        activeConversation.participant.fullName}
                     </h3>
                     <button
                       type="button"
@@ -866,15 +999,15 @@ function MessagesContent() {
                 )}
 
                 <p className="text-xs text-zinc-500 mb-2">
-                  @{activeConversation.participant.username}
+                  @{activePeerUser?.username || activeConversation.participant.username}
                 </p>
                 <p className="text-xs text-zinc-600 dark:text-zinc-400 max-w-md leading-relaxed mb-4">
-                  {activeConversation.participant.bio}
+                  {activePeerUser?.bio || activeConversation.participant.bio || 'No status available.'}
                 </p>
 
                 <div className="flex items-center gap-2 mb-6">
                   <Link
-                    href={`/profile/${activeConversation.participant.username}`}
+                    href={`/profile/${activePeerUser?.username || activeConversation.participant.username}`}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-zinc-300 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-white/5 text-xs font-semibold text-zinc-800 dark:text-zinc-200"
                   >
                     <UserIcon className="w-3.5 h-3.5" />
@@ -1141,7 +1274,7 @@ function MessagesContent() {
               value={editingText}
               onChange={(e) => setEditingText(e.target.value)}
               rows={3}
-              className="w-full p-3 rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none mb-4"
+              className="w-full p-3 rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-base sm:text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none mb-4"
             />
             <div className="flex items-center justify-end gap-2">
               <button
@@ -1187,7 +1320,7 @@ function MessagesContent() {
                   value={newChatSearch}
                   onChange={(e) => setNewChatSearch(e.target.value)}
                   placeholder="Cari nama atau @username..."
-                  className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white focus:outline-none"
+                  className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 text-base sm:text-xs text-zinc-900 dark:text-white focus:outline-none"
                   autoFocus
                 />
               </div>

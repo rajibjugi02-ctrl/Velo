@@ -174,7 +174,7 @@ export default function UserProfilePage() {
   });
 
   return (
-    <div className="w-full min-h-screen">
+    <div className="w-full min-h-screen pb-32 md:pb-8">
       {/* Top sticky bar */}
       <div className="sticky top-0 z-20 flex items-center gap-3 px-4 py-3 bg-white/80 dark:bg-black/80 backdrop-blur-2xl border-b border-zinc-200 dark:border-white/[0.08]">
         {/* Back button only appears when stalking / viewing other users' profiles */}
