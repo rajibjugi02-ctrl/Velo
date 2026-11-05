@@ -69,3 +69,4 @@ export function writeServerDb(data: VeloServerDb): void {
     console.error('Failed to write server DB:', err);
   }
 }
+

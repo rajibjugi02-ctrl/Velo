@@ -7,6 +7,7 @@ import { Post, Conversation } from '@/types/velo';
 import { useVelo } from '@/context/VeloContext';
 import { formatTimeAgo, formatNumber } from '@/lib/utils';
 import { AudioBadge } from '@/components/common/AudioBadge';
+import { globalAudio } from '@/lib/audioManager';
 import { VideoPlayer } from '@/components/common/VideoPlayer';
 import { MediaLightboxModal } from '@/components/common/MediaLightboxModal';
 import {
@@ -51,6 +52,34 @@ export const PostCard: React.FC<PostCardProps> = ({ post, isDetailView = false }
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const shareRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLElement | null>(null);
+
+  // Auto-play / pause audio when post card is centered in viewport
+  useEffect(() => {
+    if (!post.song || isDetailView) return;
+    const element = cardRef.current;
+    if (!element) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.65) {
+            globalAudio.play(post.id, post.song!);
+          } else if (!entry.isIntersecting || entry.intersectionRatio < 0.65) {
+            globalAudio.pause(post.id);
+          }
+        });
+      },
+      { threshold: 0.65 }
+    );
+
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+      globalAudio.pause(post.id);
+    };
+  }, [post.id, post.song, isDetailView]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -139,6 +168,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, isDetailView = false }
 
   return (
     <article
+      ref={cardRef}
       onClick={handleCardClick}
       className={`relative px-4 py-4 md:px-6 md:py-5 border-b border-zinc-200 dark:border-white/[0.08] transition-colors ${!isDetailView ? 'cursor-pointer hover:bg-zinc-50/50 dark:hover:bg-white/[0.02]' : ''
         }`}
@@ -241,7 +271,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, isDetailView = false }
           {/* Minimalist Audio Badge */}
           {post.song && (
             <div className="mt-2 mb-1.5">
-              <AudioBadge song={post.song} />
+              <AudioBadge song={post.song} postId={post.id} />
             </div>
           )}
 

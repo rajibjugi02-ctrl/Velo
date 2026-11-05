@@ -106,12 +106,24 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
     setCustomAudioUrl(objectUrl);
     setCustomAudioName(file.name.replace(/\.[^/.]+$/, ''));
 
-    // Probe duration
+    // Probe duration and launch trimmer
     const tempAudio = new Audio(objectUrl);
     tempAudio.onloadedmetadata = () => {
       const dur = Math.round(tempAudio.duration) || 30;
       setCustomDuration(dur);
       setTrimStart(0);
+
+      const customSong: Song = {
+        id: `custom_${Date.now()}`,
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        artist: 'Custom Upload',
+        previewUrl: objectUrl,
+        isCustom: true,
+        duration: Math.min(15, dur),
+        startTime: 0,
+        endTime: Math.min(15, dur),
+      };
+      setTrimmingSong(customSong);
     };
   };
 
@@ -173,7 +185,7 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in">
-      <div className="relative w-full max-w-lg bg-white dark:bg-zinc-950 backdrop-blur-2xl border border-zinc-200 dark:border-white/[0.08] rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[560px]">
+      <div className="relative w-full max-w-lg bg-white dark:bg-zinc-950 backdrop-blur-2xl border border-zinc-200 dark:border-white/[0.08] rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[560px] max-h-[90dvh]">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-white/[0.08]">
           <div className="flex items-center gap-2">

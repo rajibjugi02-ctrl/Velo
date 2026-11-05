@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useVelo } from '@/context/VeloContext';
+import { globalAudio } from '@/lib/audioManager';
 import { formatTimeAgo } from '@/lib/utils';
 import { VideoPlayer } from '@/components/common/VideoPlayer';
 import { Story, User } from '@/types/velo';
@@ -84,6 +85,11 @@ export default function StoryViewerPage() {
   const [isCurrentMediaLandscape, setIsCurrentMediaLandscape] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Stop any background feed audio when entering story viewer
+  useEffect(() => {
+    globalAudio.pause();
+  }, []);
 
   // Sync state if URL param or story list changes
   useEffect(() => {

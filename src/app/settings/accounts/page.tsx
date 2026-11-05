@@ -55,11 +55,10 @@ export default function SwitchAccountsPage() {
               return (
                 <div
                   key={account.id}
-                  className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
-                    isActive
+                  className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${isActive
                       ? 'bg-zinc-100 dark:bg-white/10 border-zinc-300 dark:border-white/20 text-zinc-900 dark:text-white'
                       : 'bg-zinc-50 dark:bg-white/5 border-zinc-200 dark:border-white/5 hover:border-zinc-300 dark:hover:border-white/15'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}

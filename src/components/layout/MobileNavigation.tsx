@@ -3,7 +3,6 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { motion } from 'framer-motion';
 import { useVelo } from '@/context/VeloContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Logo } from '@/components/common/Logo';
@@ -82,21 +81,16 @@ export const MobileBottomNav: React.FC = () => {
   return (
     <nav className="md:hidden fixed bottom-3 left-4 right-4 z-50 select-none pb-safe">
       <div className="relative grid grid-cols-6 max-w-md mx-auto p-1.5 rounded-full bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl border border-zinc-200/80 dark:border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.2)]">
-        {/* Persistent sliding indicator: glides seamlessly from previous button to new button */}
-        {activeIndex !== -1 && (
-          <motion.div
-            initial={false}
-            animate={{
-              x: `${activeIndex * 100}%`,
-            }}
-            transition={{
-              type: 'spring',
-              stiffness: 400,
-              damping: 32,
-            }}
-            className="absolute top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/6)] rounded-full bg-zinc-900 dark:bg-white shadow-[0_0_16px_rgba(0,0,0,0.15)] dark:shadow-[0_0_18px_rgba(255,255,255,0.28)] pointer-events-none"
-          />
-        )}
+        {/* Hardware-accelerated sliding indicator for silky smooth 60fps translation */}
+        <div
+          style={{
+            transform: `translate3d(${Math.max(0, activeIndex) * 100}%, 0, 0)`,
+            transition: 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1)',
+            willChange: 'transform',
+            opacity: activeIndex !== -1 ? 1 : 0,
+          }}
+          className="absolute top-1.5 bottom-1.5 left-1.5 w-[calc((100%-12px)/6)] rounded-full bg-zinc-900 dark:bg-white shadow-[0_0_16px_rgba(0,0,0,0.15)] dark:shadow-[0_0_18px_rgba(255,255,255,0.28)] pointer-events-none"
+        />
 
         {items.map((item, idx) => {
           const Icon = item.icon;

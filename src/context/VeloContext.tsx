@@ -162,7 +162,6 @@ const DUMMY_IDS = new Set([
   'usr_sarah',
   'usr_kai',
   'usr_jordan',
-  'usr_google_demo',
   'pst_1',
   'pst_2',
   'pst_3',
@@ -180,34 +179,6 @@ const DUMMY_IDS = new Set([
   'act_5',
   'act_6',
 ]);
-
-const DUMMY_USERNAMES = new Set([
-  'alex_chen',
-  'elena_rostova',
-  'marcus_v',
-  'sarah_k',
-  'kai_zen',
-  'jordan_google',
-]);
-
-function isDummyItem(item: any): boolean {
-  if (!item) return false;
-  if (typeof item === 'string') {
-    return DUMMY_IDS.has(item) || DUMMY_USERNAMES.has(item.toLowerCase());
-  }
-  if (item.id && DUMMY_IDS.has(item.id)) return true;
-  if (item.username && DUMMY_USERNAMES.has(item.username.toLowerCase())) return true;
-  if (item.authorId && DUMMY_IDS.has(item.authorId)) return true;
-  if (item.author) {
-    if (item.author.id && DUMMY_IDS.has(item.author.id)) return true;
-    if (item.author.username && DUMMY_USERNAMES.has(item.author.username.toLowerCase())) return true;
-  }
-  if (item.participant) {
-    if (item.participant.id && DUMMY_IDS.has(item.participant.id)) return true;
-    if (item.participant.username && DUMMY_USERNAMES.has(item.participant.username.toLowerCase())) return true;
-  }
-  return false;
-}
 
 async function syncToServer(action: string, payload: any) {
   try {
@@ -227,7 +198,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const stored = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (parsed && !isDummyItem(parsed)) return parsed;
+          if (parsed && !DUMMY_IDS.has(parsed.id)) return parsed;
         }
       } catch {}
     }
@@ -270,7 +241,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const stored = localStorage.getItem(STORAGE_KEYS.SAVED_ACCOUNTS);
         if (stored) {
           const parsed: User[] = JSON.parse(stored);
-          const cleaned = parsed.filter((u) => !isDummyItem(u));
+          const cleaned = parsed.filter((u) => !DUMMY_IDS.has(u.id));
           return cleaned.slice(0, 3);
         }
       } catch {}
@@ -299,7 +270,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedUser = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
       if (storedUser) {
         const parsed = JSON.parse(storedUser);
-        if (parsed && !isDummyItem(parsed)) {
+        if (parsed && !DUMMY_IDS.has(parsed.id)) {
           activeUser = parsed;
           setCurrentUser(activeUser);
         } else {
@@ -330,7 +301,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (storedAccounts) {
         try {
           const parsed: User[] = JSON.parse(storedAccounts);
-          const cleaned = parsed.filter((u) => !isDummyItem(u));
+          const cleaned = parsed.filter((u) => !DUMMY_IDS.has(u.id));
           if (activeUser && !cleaned.some((u) => u.id === activeUser!.id)) {
             cleaned.unshift(activeUser);
           }
@@ -344,7 +315,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedPosts = localStorage.getItem(STORAGE_KEYS.POSTS);
       if (storedPosts) {
         const parsed: Post[] = JSON.parse(storedPosts);
-        const filtered = parsed.filter((p) => !isDummyItem(p));
+        const filtered = parsed.filter((p) => !DUMMY_IDS.has(p.id) && !DUMMY_IDS.has(p.authorId));
         setPosts(filtered);
         safeLocalStorageSet(STORAGE_KEYS.POSTS, JSON.stringify(filtered));
       }
@@ -352,7 +323,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedStories = localStorage.getItem(STORAGE_KEYS.STORIES);
       if (storedStories) {
         const parsed: Story[] = JSON.parse(storedStories);
-        const filtered = parsed.filter((s) => !isDummyItem(s));
+        const filtered = parsed.filter((s) => !DUMMY_IDS.has(s.id) && !DUMMY_IDS.has(s.authorId));
         setStories(filtered);
         safeLocalStorageSet(STORAGE_KEYS.STORIES, JSON.stringify(filtered));
       }
@@ -360,7 +331,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedUsers = localStorage.getItem(STORAGE_KEYS.ALL_USERS);
       if (storedUsers) {
         const parsed: User[] = JSON.parse(storedUsers);
-        const filtered = parsed.filter((u) => !isDummyItem(u));
+        const filtered = parsed.filter((u) => !DUMMY_IDS.has(u.id));
         setAllUsers(filtered);
         safeLocalStorageSet(STORAGE_KEYS.ALL_USERS, JSON.stringify(filtered));
       }
@@ -368,7 +339,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedConvs = localStorage.getItem(STORAGE_KEYS.CONVERSATIONS);
       if (storedConvs) {
         const parsed: Conversation[] = JSON.parse(storedConvs);
-        const filtered = parsed.filter((c) => !isDummyItem(c));
+        const filtered = parsed.filter((c) => !DUMMY_IDS.has(c.id) && !DUMMY_IDS.has(c.participant?.id));
         setConversations(filtered);
         safeLocalStorageSet(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(filtered));
       }

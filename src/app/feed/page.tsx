@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useVelo } from '@/context/VeloContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { StoriesBar } from '@/components/feed/StoriesBar';
+import { QuickPostComposer } from '@/components/feed/QuickPostComposer';
 import { PostCard } from '@/components/feed/PostCard';
 import { Users, PlusSquare } from 'lucide-react';
 
@@ -64,6 +65,9 @@ export default function FeedPage() {
 
       {/* Stories Bar (At the top of feed) */}
       <StoriesBar />
+
+      {/* Inline Quick Post Composer */}
+      <QuickPostComposer />
 
       {/* Publications Feed */}
       <div className="divide-y divide-zinc-200/80 dark:divide-white/[0.08]">
