@@ -75,13 +75,13 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
       // Loop seamlessly within selected trim window
       if (audio.currentTime >= startTime + clipDuration) {
         audio.currentTime = startTime;
-        audio.play().catch(() => {});
+        audio.play().catch(() => { });
       }
     };
 
     const handleEnded = () => {
       audio.currentTime = startTime;
-      audio.play().catch(() => {});
+      audio.play().catch(() => { });
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
@@ -160,7 +160,7 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto animate-in fade-in select-none">
-      <div className="relative w-full max-w-sm sm:max-w-md bg-zinc-950 text-white border border-white/10 rounded-[32px] sm:rounded-[36px] shadow-2xl flex flex-col p-5 sm:p-6 my-auto max-h-[90dvh] overflow-y-auto pb-8 box-border">
+      <div className="relative w-full max-w-sm sm:max-w-md bg-zinc-950 text-white border border-white/10 rounded-[32px] sm:rounded-[36px] shadow-2xl flex flex-col p-5 sm:p-6 my-auto max-h-[92dvh] overflow-y-auto pb-10 box-border">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
           <button
@@ -192,9 +192,8 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
           <div className="relative w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center">
             {/* Outer vinyl disc */}
             <div
-              className={`w-full h-full rounded-full bg-zinc-900 border-4 border-zinc-800 shadow-xl flex items-center justify-center overflow-hidden ${
-                isPlaying ? 'animate-[spin_7s_linear_infinite]' : ''
-              }`}
+              className={`w-full h-full rounded-full bg-zinc-900 border-4 border-zinc-800 shadow-xl flex items-center justify-center overflow-hidden ${isPlaying ? 'animate-[spin_7s_linear_infinite]' : ''
+                }`}
               style={{
                 backgroundImage:
                   'radial-gradient(circle, #18181b 35%, #27272a 40%, #18181b 45%, #27272a 55%, #18181b 60%)',
@@ -233,11 +232,10 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
               <button
                 type="button"
                 onClick={() => handleDurationChange(15)}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                  clipDuration === 15
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${clipDuration === 15
                     ? 'bg-emerald-500 text-black shadow-sm'
                     : 'text-zinc-400 hover:text-white'
-                }`}
+                  }`}
               >
                 15 Detik
               </button>
@@ -245,11 +243,10 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
                 type="button"
                 onClick={() => handleDurationChange(30)}
                 disabled={totalTrackDuration < 30}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                  clipDuration === 30
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${clipDuration === 30
                     ? 'bg-emerald-500 text-black shadow-sm'
                     : 'text-zinc-400 hover:text-white disabled:opacity-40'
-                }`}
+                  }`}
               >
                 30 Detik
               </button>
@@ -287,11 +284,10 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
                 <div
                   key={idx}
                   style={{ height: `${height}%` }}
-                  className={`flex-1 rounded-full transition-colors duration-150 ${
-                    isInWindow
+                  className={`flex-1 rounded-full transition-colors duration-150 ${isInWindow
                       ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.3)]'
                       : 'bg-zinc-700/60'
-                  }`}
+                    }`}
                 />
               );
             })}
@@ -325,7 +321,7 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
         </div>
 
         {/* Circular Play / Pause Button with generous spacing */}
-        <div className="flex justify-center mt-3 pt-1">
+        <div className="flex justify-center mt-4 pt-1 pb-2 shrink-0">
           <button
             type="button"
             onClick={togglePlay}

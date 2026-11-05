@@ -127,6 +127,14 @@ export async function POST(req: Request) {
         break;
       }
 
+      case 'ADD_ACTIVITY': {
+        const { activity } = payload;
+        if (activity && activity.id) {
+          db.activities = [activity, ...(db.activities || []).filter((a) => a.id !== activity.id)];
+        }
+        break;
+      }
+
       case 'SYNC_ALL': {
         // Bulk client state push for cross-device sync
         if (payload.users) {

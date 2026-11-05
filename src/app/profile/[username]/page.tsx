@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useVelo } from '@/context/VeloContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { User } from '@/types/velo';
 import { PostCard } from '@/components/feed/PostCard';
 import { VideoPlayer } from '@/components/common/VideoPlayer';
 import { formatJoinedDate, generateInitialsAvatar } from '@/lib/utils';
@@ -30,6 +31,8 @@ export default function UserProfilePage() {
 
   const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'media' | 'links'>('posts');
   const [resolvedVideoBanner, setResolvedVideoBanner] = useState<string | null>(null);
+  const [serverUser, setServerUser] = useState<User | null>(null);
+  const [isSearchingServer, setIsSearchingServer] = useState(false);
 
   const decodedUsername = (username ? decodeURIComponent(username) : '').toLowerCase();
 
@@ -57,16 +60,48 @@ export default function UserProfilePage() {
     }
   }
 
+  // Cross-Device Server Lookup: Query central backend API if user not yet in local cache
+  useEffect(() => {
+    if (profileUser || serverUser || !decodedUsername) return;
+
+    let isMounted = true;
+    setIsSearchingServer(true);
+
+    fetch(`/api/users?q=${encodeURIComponent(decodedUsername)}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (!isMounted) return;
+        if (json.success && json.users && Array.isArray(json.users)) {
+          const match = json.users.find(
+            (u: any) => u.username?.toLowerCase() === decodedUsername
+          );
+          if (match) {
+            setServerUser(match);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (isMounted) setIsSearchingServer(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [decodedUsername, profileUser, serverUser]);
+
+  const activeProfile = profileUser || serverUser;
+
   // Rule 6: Rehydrate video banner from IndexedDB Blob across page reloads
   useEffect(() => {
     let activeBlobUrl = '';
-    if (profileUser?.bannerType === 'video' && profileUser?.banner) {
-      if (profileUser.banner.startsWith('http') || profileUser.banner.startsWith('data:')) {
-        setResolvedVideoBanner(profileUser.banner);
+    if (activeProfile?.bannerType === 'video' && activeProfile?.banner) {
+      if (activeProfile.banner.startsWith('http') || activeProfile.banner.startsWith('data:')) {
+        setResolvedVideoBanner(activeProfile.banner);
       } else {
-        const idbKey = profileUser.banner.startsWith('idb:')
-          ? profileUser.banner.replace('idb:', '')
-          : `user_banner_video_${profileUser.id}`;
+        const idbKey = activeProfile.banner.startsWith('idb:')
+          ? activeProfile.banner.replace('idb:', '')
+          : `user_banner_video_${activeProfile.id}`;
 
         getMediaBlob(idbKey).then((blob) => {
           if (blob && blob instanceof Blob) {
@@ -82,32 +117,35 @@ export default function UserProfilePage() {
     return () => {
       if (activeBlobUrl) URL.revokeObjectURL(activeBlobUrl);
     };
-  }, [profileUser?.id, profileUser?.banner, profileUser?.bannerType]);
+  }, [activeProfile?.id, activeProfile?.banner, activeProfile?.bannerType]);
 
-  if (!isHydrated) {
+  if (!isHydrated || isSearchingServer) {
     return (
-      <div className="w-full min-h-[50vh] flex items-center justify-center text-xs text-zinc-500">
-        <div className="w-5 h-5 rounded-full border-2 border-zinc-400 border-t-transparent animate-spin" />
+      <div className="w-full min-h-[50vh] flex flex-col items-center justify-center text-xs text-zinc-500 gap-3 select-none">
+        <div className="w-6 h-6 rounded-full border-2 border-zinc-500 border-t-white animate-spin" />
+        <span className="text-zinc-400 font-medium">Loading @{username}...</span>
       </div>
     );
   }
 
-  if (!profileUser) {
+  if (!activeProfile) {
     return (
-      <div className="w-full px-4 py-16 text-center">
+      <div className="w-full px-4 py-16 text-center select-none">
         <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">Account Not Found</h2>
         <p className="text-sm text-zinc-500 mb-6">
           The user @{username} does not exist or has been modified.
         </p>
         <button
           onClick={() => router.push('/feed')}
-          className="px-5 py-2.5 rounded-full bg-zinc-900 text-white dark:bg-white dark:text-black font-semibold text-xs"
+          className="px-5 py-2.5 rounded-full bg-zinc-900 text-white dark:bg-white dark:text-black font-semibold text-xs transition-transform active:scale-95"
         >
           Return Home
         </button>
       </div>
     );
   }
+
+  profileUser = activeProfile;
 
   const isOwnProfile = currentUser?.id === profileUser.id;
 

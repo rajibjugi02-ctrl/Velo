@@ -333,6 +333,7 @@ export default function StoryViewerPage() {
           {currentStory.mediaType === 'video' ? (
             <VideoPlayer
               src={currentStory.mediaUrl}
+              muted={Boolean(currentStory.song) || isMuted}
               className={`w-full ${
                 isCurrentMediaLandscape
                   ? 'h-auto max-h-[85%] object-contain rounded-2xl shadow-2xl'

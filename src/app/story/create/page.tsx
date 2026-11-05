@@ -45,13 +45,7 @@ export default function CreateStoryPage() {
   const [overlayFont, setOverlayFont] = useState<'modern' | 'serif' | 'neon' | 'bold'>('modern');
 
   // Music & Tag states
-  const [selectedSong, setSelectedSong] = useState<Song | undefined>({
-    id: 'itunes-1',
-    title: 'Starboy',
-    artist: 'The Weeknd ft. Daft Punk',
-    previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/11/71/d6/1171d6ad-3c96-e027-2af6-58028426588c/mzaf_15137631797407745471.plus.aac.p.m4a',
-    duration: 30,
-  });
+  const [selectedSong, setSelectedSong] = useState<Song | undefined>(undefined);
   const [taggedUsers, setTaggedUsers] = useState<User[]>([]);
 
   const [musicModalOpen, setMusicModalOpen] = useState(false);
@@ -281,9 +275,20 @@ export default function CreateStoryPage() {
                       {currentUser?.username}
                     </p>
                     {selectedSong && (
-                      <div className="flex items-center gap-1 text-[10px] text-white/80 truncate">
-                        <Music className="w-2.5 h-2.5 text-sky-400 shrink-0" />
-                        <span>{selectedSong.title} • {selectedSong.artist}</span>
+                      <div className="flex items-center gap-1.5 text-[10px] text-white/90 bg-black/50 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10 truncate mt-1 max-w-[200px]">
+                        <Music className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                        <span className="truncate">{selectedSong.title} • {selectedSong.artist}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSong(undefined);
+                          }}
+                          className="p-0.5 hover:bg-white/20 rounded-full text-zinc-300 hover:text-white transition-colors shrink-0"
+                          title="Hapus lagu (gunakan audio asli video)"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
                       </div>
                     )}
                   </div>
@@ -482,17 +487,33 @@ export default function CreateStoryPage() {
                   {selectedSong.title} • {selectedSong.artist}
                 </p>
               ) : (
-                <p className="text-xs text-zinc-400">No soundtrack selected</p>
+                <p className="text-xs text-zinc-400">
+                  {mediaFile?.type === 'video'
+                    ? 'Audio asli video aktif (tanpa lagu latar)'
+                    : 'Tidak ada musik dipilih'}
+                </p>
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setMusicModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-white dark:bg-white/[0.08] border border-zinc-200 dark:border-white/10 text-xs font-semibold text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/15 shrink-0"
-            >
-              {selectedSong ? 'Change Song' : 'Add Music'}
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {selectedSong && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSong(undefined)}
+                  title="Hapus lagu & aktifkan audio video asli"
+                  className="p-1.5 rounded-xl bg-zinc-200/80 hover:bg-zinc-300 dark:bg-white/10 dark:hover:bg-white/20 text-zinc-600 dark:text-zinc-300 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setMusicModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-white dark:bg-white/[0.08] border border-zinc-200 dark:border-white/10 text-xs font-semibold text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/15"
+              >
+                {selectedSong ? 'Ganti Lagu' : 'Tambah Musik'}
+              </button>
+            </div>
           </div>
 
           {/* Tag People Row */}

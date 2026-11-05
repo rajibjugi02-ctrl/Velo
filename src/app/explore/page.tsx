@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useVelo } from '@/context/VeloContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { PostCard } from '@/components/feed/PostCard';
+import { User } from '@/types/velo';
 import { Search, TrendingUp, UserCheck, UserPlus, X, Hash } from 'lucide-react';
 
 function ExploreContent() {
@@ -17,6 +18,7 @@ function ExploreContent() {
 
   const [query, setQuery] = useState(initialQuery);
   const [activeTab, setActiveTab] = useState<'top' | 'people' | 'posts' | 'tags'>('top');
+  const [serverUsers, setServerUsers] = useState<User[]>([]);
 
   useEffect(() => {
     if (initialQuery) {
@@ -26,7 +28,36 @@ function ExploreContent() {
 
   const cleanQuery = query.toLowerCase().replace('#', '').trim();
 
-  const matchedUsers = allUsers.filter(
+  // Query server database in real-time for cross-device discovery
+  useEffect(() => {
+    if (!cleanQuery) {
+      setServerUsers([]);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      fetch(`/api/users?q=${encodeURIComponent(cleanQuery)}`)
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.success && json.users && Array.isArray(json.users)) {
+            setServerUsers(json.users);
+          }
+        })
+        .catch(() => {});
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [cleanQuery]);
+
+  // Combine local and remote server users seamlessly
+  const combinedUsers = useMemo(() => {
+    const map = new Map<string, User>();
+    allUsers.forEach((u) => map.set(u.id, u));
+    serverUsers.forEach((u) => map.set(u.id, u));
+    return Array.from(map.values());
+  }, [allUsers, serverUsers]);
+
+  const matchedUsers = combinedUsers.filter(
     (u) =>
       u.fullName.toLowerCase().includes(cleanQuery) ||
       u.username.toLowerCase().includes(cleanQuery) ||

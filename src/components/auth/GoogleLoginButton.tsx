@@ -1,54 +1,71 @@
 'use client';
 
-import React, { useState } from 'react';
-import { GoogleLogin } from '@react-oauth/google';
+import React, { useState, useEffect } from 'react';
+import { useGoogleLogin } from '@react-oauth/google';
 import { useRouter } from 'next/navigation';
 import { useVelo } from '@/context/VeloContext';
 import { generateInitialsAvatar } from '@/lib/utils';
 import { User } from '@/types/velo';
+import { Loader2 } from 'lucide-react';
+import { Logo } from '@/components/common/Logo';
 
 interface GoogleLoginButtonProps {
   isSwitch?: boolean;
 }
 
-// Helper untuk decode JWT Google ID Token tanpa library eksternal
-function parseJwt(token: string) {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split('')
-        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
+// Google Official SVG Icon
+function GoogleIcon() {
+  return (
+    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+      <path
+        fill="#4285F4"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+      />
+    </svg>
+  );
 }
 
 function RealGoogleButton({ isSwitch }: GoogleLoginButtonProps) {
   const router = useRouter();
   const { login, addAccount, showToast } = useVelo();
+  const [isVerifying, setIsVerifying] = useState(false);
 
-  const handleSuccess = (credentialResponse: any) => {
+  // Safety timeout to guarantee the UI never gets stuck in verifying state
+  useEffect(() => {
+    if (!isVerifying) return;
+    const timeout = setTimeout(() => {
+      setIsVerifying(false);
+      showToast('Login verification timed out. Please try again.', 'error');
+    }, 14000);
+    return () => clearTimeout(timeout);
+  }, [isVerifying, showToast]);
+
+  const handleOAuthSuccess = async (tokenResponse: any) => {
     try {
-      if (!credentialResponse.credential) {
-        showToast('Kredensial Google tidak ditemukan', 'error');
-        return;
+      setIsVerifying(true);
+      const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to retrieve Google userinfo');
       }
 
-      const profile = parseJwt(credentialResponse.credential);
-      if (!profile) {
-        showToast('Gagal membaca data profil Google', 'error');
-        return;
-      }
-
-      // Ekstraksi data profil Google asli
-      const cleanUsername = (profile.email?.split('@')[0] || 'google_user')
-        .toLowerCase()
-        .replace(/[^a-z0-9_]/g, '');
+      const profile = await res.json();
+      const rawPrefix = profile.email?.split('@')[0] || 'google_user';
+      const cleanUsername = rawPrefix.toLowerCase().replace(/[^a-z0-9_]/g, '') || 'velo_user';
 
       const googleUser: User = {
         id: `usr_g_${profile.sub}`,
@@ -58,13 +75,22 @@ function RealGoogleButton({ isSwitch }: GoogleLoginButtonProps) {
         avatar: profile.picture || generateInitialsAvatar(profile.name || 'Google User'),
         banner: '',
         bannerType: 'image',
-        bio: 'Verified Google Creator on Velo',
+        bio: 'Verified Creator on Velo',
         links: [],
         followersCount: 0,
         followingCount: 0,
         onlineStatus: 'online',
         createdAt: new Date().toISOString(),
       };
+
+      // Persist to central server database immediately
+      try {
+        await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(googleUser),
+        });
+      } catch {}
 
       if (isSwitch) {
         addAccount(googleUser);
@@ -73,29 +99,58 @@ function RealGoogleButton({ isSwitch }: GoogleLoginButtonProps) {
       }
 
       showToast(`Welcome, ${googleUser.fullName}!`, 'success');
-      router.push(`/profile/${googleUser.username}`);
+      setIsVerifying(false);
+
+      // Safe navigation to home or profile
+      router.replace('/');
     } catch {
-      showToast('Gagal memproses login Google', 'error');
+      setIsVerifying(false);
+      showToast('Gagal memproses data akun Google', 'error');
     }
   };
 
+  const loginWithGoogle = useGoogleLogin({
+    onSuccess: handleOAuthSuccess,
+    onError: () => {
+      setIsVerifying(false);
+      showToast('Google Sign-In dibatalkan atau diblokir pop-up', 'error');
+    },
+    flow: 'implicit',
+  });
+
   return (
-    <div className="w-full flex justify-center mb-4">
-      <div className="w-full max-w-full overflow-hidden flex justify-center">
-        <GoogleLogin
-          onSuccess={handleSuccess}
-          onError={() => {
-            showToast('Google Sign-In gagal atau dibatalkan', 'error');
-          }}
-          useOneTap={false}
-          theme="outline"
-          size="large"
-          shape="pill"
-          text="continue_with"
-          width="360"
-        />
-      </div>
-    </div>
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setIsVerifying(true);
+          loginWithGoogle();
+        }}
+        disabled={isVerifying}
+        className="w-full max-w-full h-12 px-4 py-3 rounded-xl flex items-center justify-center gap-3 text-sm sm:text-base font-medium transition-all active:scale-[0.98] bg-white hover:bg-zinc-50 dark:bg-white/[0.08] dark:hover:bg-white/[0.12] text-zinc-900 dark:text-white border border-zinc-200 dark:border-white/10 shadow-sm disabled:opacity-60 mb-4 select-none cursor-pointer"
+      >
+        <GoogleIcon />
+        <span className="whitespace-nowrap truncate font-semibold">
+          {isVerifying ? 'Connecting to Google...' : 'Continue with Google'}
+        </span>
+      </button>
+
+      {/* Dark Spatial Loading Overlay to prevent blank white screens */}
+      {isVerifying && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-xl animate-in fade-in select-none">
+          <div className="flex flex-col items-center gap-4 p-6 rounded-3xl bg-zinc-900/90 border border-white/10 shadow-2xl max-w-xs text-center">
+            <Logo size={48} />
+            <div className="flex items-center gap-2 text-sm text-zinc-300 font-medium">
+              <Loader2 className="w-4 h-4 animate-spin text-white" />
+              <span>Verifying Google Account...</span>
+            </div>
+            <p className="text-xs text-zinc-500">
+              Please wait while we hydrate your Velo session
+            </p>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -105,14 +160,14 @@ function FallbackGoogleButton({ isSwitch }: GoogleLoginButtonProps) {
 
   const handleDemoGoogle = () => {
     const googleUser: User = {
-      id: 'usr_google_demo',
-      username: 'jordan_google',
-      fullName: 'Jordan Creator',
-      email: 'jordan@gmail.com',
-      avatar: generateInitialsAvatar('Jordan Creator'),
+      id: 'usr_g_demo',
+      username: 'google_creator',
+      fullName: 'Google Creator',
+      email: 'creator@gmail.com',
+      avatar: generateInitialsAvatar('Google Creator'),
       banner: '',
       bannerType: 'image',
-      bio: 'Demo Google Profile • Masukkan NEXT_PUBLIC_GOOGLE_CLIENT_ID untuk Google OAuth Asli',
+      bio: 'Verified Google Profile',
       links: [],
       followersCount: 0,
       followingCount: 0,
@@ -125,35 +180,20 @@ function FallbackGoogleButton({ isSwitch }: GoogleLoginButtonProps) {
     } else {
       login(googleUser);
     }
-    showToast('Masuk dengan Demo Google. Set NEXT_PUBLIC_GOOGLE_CLIENT_ID untuk OAuth asli.', 'info');
-    router.push(`/profile/${googleUser.username}`);
+    showToast('Masuk dengan Akun Google Demo. Set NEXT_PUBLIC_GOOGLE_CLIENT_ID untuk OAuth asli.', 'info');
+    router.replace('/');
   };
 
   return (
     <button
       type="button"
       onClick={handleDemoGoogle}
-      className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-2xl bg-zinc-50 hover:bg-zinc-100 text-zinc-900 dark:bg-white/[0.06] dark:hover:bg-white/[0.1] dark:text-white font-semibold text-xs sm:text-sm border border-zinc-200 dark:border-white/10 shadow-sm transition-all mb-4 active:scale-[0.99]"
+      className="w-full max-w-full h-12 px-4 py-3 rounded-xl flex items-center justify-center gap-3 text-sm sm:text-base font-medium transition-all active:scale-[0.98] bg-white hover:bg-zinc-50 dark:bg-white/[0.08] dark:hover:bg-white/[0.12] text-zinc-900 dark:text-white border border-zinc-200 dark:border-white/10 shadow-sm mb-4 select-none cursor-pointer"
     >
-      <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-        <path
-          fill="#4285F4"
-          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-        />
-        <path
-          fill="#34A853"
-          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-        />
-        <path
-          fill="#FBBC05"
-          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-        />
-        <path
-          fill="#EA4335"
-          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-        />
-      </svg>
-      <span>Continue with Google</span>
+      <GoogleIcon />
+      <span className="whitespace-nowrap truncate font-semibold">
+        Continue with Google
+      </span>
     </button>
   );
 }

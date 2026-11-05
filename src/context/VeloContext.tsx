@@ -653,6 +653,22 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((p) => {
         if (p.id === postId) {
           const isLiked = !p.isLiked;
+
+          // Dispatch notification if newly liked and not author
+          if (isLiked && currentUser && p.authorId !== currentUser.id) {
+            const newAct: Activity = {
+              id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+              type: 'like',
+              actor: currentUser,
+              recipientId: p.authorId,
+              targetPostId: p.id,
+              createdAt: new Date().toISOString(),
+              isRead: false,
+            };
+            setActivities((acts) => [newAct, ...acts]);
+            syncToServer('ADD_ACTIVITY', { activity: newAct });
+          }
+
           return {
             ...p,
             isLiked,
@@ -669,6 +685,22 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((p) => {
         if (p.id === postId) {
           const isReposted = !p.isReposted;
+
+          // Dispatch notification if newly reposted and not author
+          if (isReposted && currentUser && p.authorId !== currentUser.id) {
+            const newAct: Activity = {
+              id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+              type: 'repost',
+              actor: currentUser,
+              recipientId: p.authorId,
+              targetPostId: p.id,
+              createdAt: new Date().toISOString(),
+              isRead: false,
+            };
+            setActivities((acts) => [newAct, ...acts]);
+            syncToServer('ADD_ACTIVITY', { activity: newAct });
+          }
+
           return {
             ...p,
             isReposted,
@@ -785,6 +817,24 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPosts((prev) =>
       prev.map((p) => (p.id === postId ? { ...p, commentsCount: p.commentsCount + 1 } : p))
     );
+
+    // Trigger comment/reply notification to post author
+    const targetPost = posts.find((p) => p.id === postId);
+    if (targetPost && targetPost.authorId !== currentUser.id) {
+      const newAct: Activity = {
+        id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        type: 'comment',
+        actor: currentUser,
+        recipientId: targetPost.authorId,
+        targetPostId: postId,
+        commentText: content,
+        createdAt: new Date().toISOString(),
+        isRead: false,
+      };
+      setActivities((acts) => [newAct, ...acts]);
+      syncToServer('ADD_ACTIVITY', { activity: newAct });
+    }
+
     showToast('Reply published', 'success');
   };
 
@@ -918,6 +968,20 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setFollowingIds(nextFollowing);
     safeLocalStorageSet(`velo_following_${currentUser.id}`, JSON.stringify(nextFollowing));
+
+    // Trigger follow notification
+    if (!isCurrentlyFollowing && userId !== currentUser.id) {
+      const newAct: Activity = {
+        id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        type: 'follow',
+        actor: currentUser,
+        recipientId: userId,
+        createdAt: new Date().toISOString(),
+        isRead: false,
+      };
+      setActivities((acts) => [newAct, ...acts]);
+      syncToServer('ADD_ACTIVITY', { activity: newAct });
+    }
 
     const updatedCurrentUser: User = {
       ...currentUser,

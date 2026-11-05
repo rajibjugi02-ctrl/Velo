@@ -149,6 +149,7 @@ export interface Activity {
   id: string;
   type: 'like' | 'repost' | 'comment' | 'tag' | 'follow';
   actor: User;
+  recipientId?: string;
   targetPostId?: string;
   targetStoryId?: string;
   commentText?: string;

@@ -21,8 +21,8 @@ export default function RootPage() {
   }, [currentUser, isHydrated, router]);
 
   return (
-    <div className="w-full min-h-screen flex items-center justify-center bg-white dark:bg-black">
-      <div className="w-6 h-6 rounded-full border-2 border-zinc-400 border-t-transparent animate-spin" />
+    <div className="w-full min-h-screen flex flex-col items-center justify-center bg-[#09090b] text-white select-none">
+      <div className="w-7 h-7 rounded-full border-2 border-zinc-600 border-t-white animate-spin" />
     </div>
   );
 }

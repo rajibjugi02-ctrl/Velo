@@ -143,6 +143,7 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
                 src={currentItem.url}
                 className="max-h-[85vh] w-auto max-w-full rounded-2xl"
                 controls
+                muted={false}
               />
             </div>
           ) : (
