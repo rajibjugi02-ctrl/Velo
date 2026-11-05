@@ -35,25 +35,42 @@ export default function ActivityPage() {
 
   const [activeTab, setActiveTab] = useState<'interactions' | 'connections'>('interactions');
 
-  // Automatically mark all activities as read when visiting the activity center
+  // Guard to ensure markAllActivitiesAsRead runs only once upon mounting, never looping
+  const hasMarkedReadRef = React.useRef(false);
+
   useEffect(() => {
-    markAllActivitiesAsRead();
-  }, [markAllActivitiesAsRead]);
+    if (hasMarkedReadRef.current) return;
+    const hasUnread = activities.some((a) => a.recipientId === currentUser?.id && !a.isRead);
+    if (hasUnread) {
+      hasMarkedReadRef.current = true;
+      markAllActivitiesAsRead();
+    }
+  }, [currentUser?.id, activities, markAllActivitiesAsRead]);
 
-  // Tab 1: Clean Interactions only (Likes, Reposts, Comments, Replies, Tags - NO follow spam)
-  const interactionActivities = activities.filter((a) => a.type !== 'follow');
+  // Tab 1: Clean Interactions only (memoized to eliminate unnecessary renders)
+  const interactionActivities = React.useMemo(() => {
+    return activities.filter((a) => a.type !== 'follow');
+  }, [activities]);
 
-  // Tab 2: Follows & Connections - strictly genuine creators who follow the active user
+  // Tab 2: Follows & Connections with precalculated mutual status (zero re-render overhead)
   const followersList = React.useMemo(() => {
-    const list: typeof allUsers = [];
+    const list: (typeof allUsers[0] & { isFollowingUser: boolean; isMutual: boolean })[] = [];
     const seen = new Set<string>();
+
+    const checkMutual = (uId: string, isFollowed: boolean) => {
+      const isFollowing = followingIds.includes(uId) || isFollowed;
+      const isFollower = followersIds.includes(uId);
+      return isFollowing && isFollower;
+    };
 
     // 1. From confirmed followersIds
     (followersIds || []).forEach((fId) => {
       const found = allUsers.find((u) => u.id === fId);
       if (found && !seen.has(found.id)) {
         seen.add(found.id);
-        list.push(found);
+        const isFollowingUser = followingIds.includes(found.id) || !!found.isFollowing;
+        const isMutual = checkMutual(found.id, isFollowingUser) || !!found.isMutual;
+        list.push({ ...found, isFollowingUser, isMutual });
       }
     });
 
@@ -63,13 +80,16 @@ export default function ActivityPage() {
         if (!seen.has(act.actor.id)) {
           seen.add(act.actor.id);
           const fromAll = allUsers.find((u) => u.id === act.actor.id);
-          list.push(fromAll || act.actor);
+          const userObj = fromAll || act.actor;
+          const isFollowingUser = followingIds.includes(userObj.id) || !!userObj.isFollowing;
+          const isMutual = checkMutual(userObj.id, isFollowingUser) || !!userObj.isMutual;
+          list.push({ ...userObj, isFollowingUser, isMutual });
         }
       }
     });
 
     return list;
-  }, [allUsers, followersIds, activities, currentUser?.id]);
+  }, [allUsers, followersIds, followingIds, activities, currentUser?.id]);
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -111,7 +131,7 @@ export default function ActivityPage() {
   return (
     <div className="w-full min-h-screen">
       {/* Page Header */}
-      <div className="sticky top-0 z-20 px-4 py-3 bg-white/80 dark:bg-black/70 backdrop-blur-2xl border-b border-zinc-200 dark:border-white/10 transition-colors">
+      <div className="sticky top-0 z-20 px-4 py-3 bg-white/90 dark:bg-black/80 backdrop-blur-lg border-b border-zinc-200 dark:border-white/10 transition-colors">
         <h1 className="text-lg font-extrabold text-zinc-900 dark:text-white mb-3">
           {t('activity')}
         </h1>
@@ -263,9 +283,8 @@ export default function ActivityPage() {
             </div>
           ) : (
             followersList.map((user) => {
-              const isFollowingUser = followingIds.includes(user.id) || !!user.isFollowing;
-              const isFollowerOfUser = followersIds.includes(user.id);
-              const isMutual = (isFollowingUser && isFollowerOfUser) || !!user.isMutual;
+              const isFollowingUser = user.isFollowingUser;
+              const isMutual = user.isMutual;
 
               return (
                 <div

@@ -3,7 +3,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import {
   User,
   Post,
@@ -1755,26 +1755,39 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     showToast('Chat history cleared', 'info');
   };
 
-  const markActivityAsRead = (activityId: string) => {
+  const markActivityAsRead = useCallback((activityId: string) => {
+    let shouldSync = false;
     setActivities((prev) => {
+      const target = prev.find((a) => a.id === activityId);
+      if (!target || target.isRead) return prev;
+      shouldSync = true;
       const updated = prev.map((a) => (a.id === activityId ? { ...a, isRead: true } : a));
       safeLocalStorageSet(STORAGE_KEYS.ACTIVITIES, JSON.stringify(updated));
       return updated;
     });
-    syncToServer('MARK_ACTIVITY_READ', { activityId });
-  };
+    if (shouldSync) {
+      syncToServer('MARK_ACTIVITY_READ', { activityId });
+    }
+  }, []);
 
-  const markAllActivitiesAsRead = () => {
-    if (!currentUser) return;
+  const markAllActivitiesAsRead = useCallback(() => {
+    const activeUser = currentUserRef.current;
+    if (!activeUser) return;
+    let shouldSync = false;
     setActivities((prev) => {
+      const hasUnread = prev.some((a) => a.recipientId === activeUser.id && !a.isRead);
+      if (!hasUnread) return prev;
+      shouldSync = true;
       const updated = prev.map((a) =>
-        a.recipientId === currentUser.id ? { ...a, isRead: true } : a
+        a.recipientId === activeUser.id ? { ...a, isRead: true } : a
       );
       safeLocalStorageSet(STORAGE_KEYS.ACTIVITIES, JSON.stringify(updated));
       return updated;
     });
-    syncToServer('MARK_ALL_ACTIVITIES_READ', { userId: currentUser.id });
-  };
+    if (shouldSync) {
+      syncToServer('MARK_ALL_ACTIVITIES_READ', { userId: activeUser.id });
+    }
+  }, []);
 
   const updateSettings = (updated: Partial<VeloSettings>) => {
     setSettings((prev) => {
