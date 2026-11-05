@@ -83,8 +83,10 @@ export default function StoryViewerPage() {
   const [viewersDrawerOpen, setViewersDrawerOpen] = useState(false);
   const [viewerSearch, setViewerSearch] = useState('');
   const [isCurrentMediaLandscape, setIsCurrentMediaLandscape] = useState(false);
+  const [isVideoBuffering, setIsVideoBuffering] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Stop any background feed audio when entering story viewer
   useEffect(() => {
@@ -107,18 +109,11 @@ export default function StoryViewerPage() {
   const currentGroup = userStoryGroups[currentGroupIdx];
   const currentStory = currentGroup?.stories[currentStoryIdx];
 
-  // Detect media dimensions for landscape vs portrait display
+  // Detect image media dimensions for landscape vs portrait display
   useEffect(() => {
     if (!currentStory?.mediaUrl || typeof window === 'undefined') return;
 
-    if (currentStory.mediaType === 'video') {
-      const v = document.createElement('video');
-      v.preload = 'metadata';
-      v.src = currentStory.mediaUrl;
-      v.onloadedmetadata = () => {
-        setIsCurrentMediaLandscape(v.videoWidth > v.videoHeight);
-      };
-    } else {
+    if (currentStory.mediaType === 'image') {
       const img = new (window as any).Image();
       img.onload = () => {
         setIsCurrentMediaLandscape(img.naturalWidth > img.naturalHeight);
@@ -168,6 +163,13 @@ export default function StoryViewerPage() {
         audioRef.current.pause();
       } else {
         audioRef.current.play().catch(() => {});
+      }
+    }
+    if (videoRef.current) {
+      if (isPaused || viewersDrawerOpen) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play().catch(() => {});
       }
     }
   }, [isPaused, viewersDrawerOpen]);
@@ -230,6 +232,11 @@ export default function StoryViewerPage() {
 
     const timer = setInterval(() => {
       setProgress((prev) => {
+        // Pause timer progression if video is waiting for network buffer
+        if (isVideoBuffering) {
+          return prev;
+        }
+
         // If audio track is playing, sync progress bar with audio currentTime
         if (audioRef.current && !audioRef.current.paused && audioRef.current.duration) {
           const elapsed = Math.max(0, audioRef.current.currentTime - songStart);
@@ -241,7 +248,17 @@ export default function StoryViewerPage() {
           return p;
         }
 
-        // Standard smooth clock progression
+        // If video story without background song, sync smoothly with video playback
+        if (currentStory.mediaType === 'video' && !currentStory.song && videoRef.current && videoRef.current.duration) {
+          const p = Math.min(100, (videoRef.current.currentTime / videoRef.current.duration) * 100);
+          if (p >= 100 || videoRef.current.ended) {
+            handleNextStory();
+            return 0;
+          }
+          return p;
+        }
+
+        // Standard smooth clock progression for photos
         const next = prev + (INTERVAL / targetDuration) * 100;
         if (next >= 100) {
           handleNextStory();
@@ -252,7 +269,7 @@ export default function StoryViewerPage() {
     }, INTERVAL);
 
     return () => clearInterval(timer);
-  }, [currentGroupIdx, currentStoryIdx, isPaused, viewersDrawerOpen, currentStory]);
+  }, [currentGroupIdx, currentStoryIdx, isPaused, viewersDrawerOpen, currentStory, isVideoBuffering]);
 
   if (!currentStory || !currentGroup) {
     return (
@@ -308,17 +325,8 @@ export default function StoryViewerPage() {
       <div className="relative w-full h-[100dvh] md:max-w-md md:h-[92vh] md:rounded-[36px] overflow-hidden bg-zinc-950 flex flex-col justify-between shadow-2xl border-0 md:border md:border-white/10 transition-all duration-300">
         {/* Ambient Blurred Backdrop for Landscape Media */}
         {isCurrentMediaLandscape && (
-          <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40 blur-2xl scale-125">
-            {currentStory.mediaType === 'video' ? (
-              <video
-                src={currentStory.mediaUrl}
-                className="w-full h-full object-cover"
-                muted
-                autoPlay
-                loop
-                playsInline
-              />
-            ) : (
+          <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30 blur-2xl scale-125 bg-black">
+            {currentStory.mediaType === 'image' && (
               <img
                 src={currentStory.mediaUrl}
                 alt=""
@@ -332,8 +340,19 @@ export default function StoryViewerPage() {
         <div className="absolute inset-0 flex items-center justify-center">
           {currentStory.mediaType === 'video' ? (
             <VideoPlayer
+              ref={videoRef}
               src={currentStory.mediaUrl}
               muted={Boolean(currentStory.song) || isMuted}
+              preload="auto"
+              onWaiting={() => setIsVideoBuffering(true)}
+              onPlaying={() => setIsVideoBuffering(false)}
+              onCanPlay={() => setIsVideoBuffering(false)}
+              onLoadedMetadata={(e) => {
+                const target = e.currentTarget;
+                if (target.videoWidth && target.videoHeight) {
+                  setIsCurrentMediaLandscape(target.videoWidth > target.videoHeight);
+                }
+              }}
               className={`w-full ${
                 isCurrentMediaLandscape
                   ? 'h-auto max-h-[85%] object-contain rounded-2xl shadow-2xl'

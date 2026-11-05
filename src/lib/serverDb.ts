@@ -13,6 +13,8 @@ export interface VeloServerDb {
   comments: Record<string, Comment[]>;
   activities: Activity[];
   follows: Record<string, string[]>;
+  likes: Record<string, string[]>;       // postId -> userId[]
+  reposts: Record<string, string[]>;     // postId -> userId[]
 }
 
 // In Vercel serverless, the repository filesystem is read-only, only /tmp is writable
@@ -35,6 +37,8 @@ function getEmptyDb(): VeloServerDb {
     comments: {},
     activities: [],
     follows: {},
+    likes: {},
+    reposts: {},
   };
 }
 
@@ -62,6 +66,8 @@ export function readServerDb(): VeloServerDb {
           comments: parsed.comments || {},
           activities: Array.isArray(parsed.activities) ? parsed.activities : [],
           follows: parsed.follows && typeof parsed.follows === 'object' ? parsed.follows : {},
+          likes: parsed.likes && typeof parsed.likes === 'object' ? parsed.likes : {},
+          reposts: parsed.reposts && typeof parsed.reposts === 'object' ? parsed.reposts : {},
         };
         return memoryDb;
       }

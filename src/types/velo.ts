@@ -33,6 +33,7 @@ export interface Song {
   startTime?: number;
   endTime?: number;
   isCustom?: boolean;
+  fullDuration?: number;
 }
 
 export interface Post {

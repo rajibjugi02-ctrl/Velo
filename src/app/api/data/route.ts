@@ -97,11 +97,94 @@ export async function POST(req: Request) {
 
       case 'TOGGLE_LIKE_POST': {
         const { postId, userId } = payload;
-        const post = db.posts.find((p) => p.id === postId);
-        if (post) {
-          const isLiked = post.isLiked;
-          post.isLiked = !isLiked;
-          post.likesCount = Math.max(0, post.likesCount + (isLiked ? -1 : 1));
+        if (postId && userId) {
+          if (!db.likes) db.likes = {};
+          if (!db.likes[postId]) db.likes[postId] = [];
+
+          const isLiked = db.likes[postId].includes(userId);
+          if (isLiked) {
+            db.likes[postId] = db.likes[postId].filter((id) => id !== userId);
+          } else {
+            db.likes[postId].push(userId);
+          }
+
+          const post = db.posts.find((p) => p.id === postId);
+          if (post) {
+            post.likesCount = db.likes[postId].length;
+            post.isLiked = !isLiked;
+          }
+        }
+        break;
+      }
+
+      case 'TOGGLE_REPOST_POST': {
+        const { postId, userId } = payload;
+        if (postId && userId) {
+          if (!db.reposts) db.reposts = {};
+          if (!db.reposts[postId]) db.reposts[postId] = [];
+
+          const isReposted = db.reposts[postId].includes(userId);
+          if (isReposted) {
+            db.reposts[postId] = db.reposts[postId].filter((id) => id !== userId);
+          } else {
+            db.reposts[postId].push(userId);
+          }
+
+          const post = db.posts.find((p) => p.id === postId);
+          if (post) {
+            post.repostsCount = db.reposts[postId].length;
+            post.isReposted = !isReposted;
+          }
+        }
+        break;
+      }
+
+      case 'ADD_COMMENT': {
+        const { postId, comment, parentId } = payload;
+        if (postId && comment) {
+          if (!db.comments) db.comments = {};
+          if (!db.comments[postId]) db.comments[postId] = [];
+
+          if (parentId) {
+            db.comments[postId] = db.comments[postId].map((c) => {
+              if (c.id === parentId) {
+                return {
+                  ...c,
+                  replies: [...(c.replies || []), comment],
+                };
+              }
+              return c;
+            });
+          } else {
+            db.comments[postId] = [comment, ...db.comments[postId]];
+          }
+
+          const post = db.posts.find((p) => p.id === postId);
+          if (post) {
+            let total = 0;
+            db.comments[postId].forEach((c) => {
+              total++;
+              if (c.replies) total += c.replies.length;
+            });
+            post.commentsCount = total;
+          }
+        }
+        break;
+      }
+
+      case 'DELETE_COMMENT': {
+        const { postId, commentId } = payload;
+        if (postId && commentId && db.comments && db.comments[postId]) {
+          db.comments[postId] = db.comments[postId].filter((c) => c.id !== commentId);
+          const post = db.posts.find((p) => p.id === postId);
+          if (post) {
+            let total = 0;
+            db.comments[postId].forEach((c) => {
+              total++;
+              if (c.replies) total += c.replies.length;
+            });
+            post.commentsCount = total;
+          }
         }
         break;
       }

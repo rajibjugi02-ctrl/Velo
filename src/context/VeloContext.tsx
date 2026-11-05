@@ -417,10 +417,65 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
             }
 
+            const userUid = activeUser?.id;
+            const userLikedSet = new Set<string>();
+            const userRepostedSet = new Set<string>();
+            if (userUid) {
+              if (server.likes) {
+                Object.entries(server.likes).forEach(([postId, userIds]) => {
+                  if (Array.isArray(userIds) && userIds.includes(userUid)) {
+                    userLikedSet.add(postId);
+                  }
+                });
+              }
+              if (server.reposts) {
+                Object.entries(server.reposts).forEach(([postId, userIds]) => {
+                  if (Array.isArray(userIds) && userIds.includes(userUid)) {
+                    userRepostedSet.add(postId);
+                  }
+                });
+              }
+              try {
+                const localL = JSON.parse(localStorage.getItem(`velo_user_likes_${userUid}`) || '[]');
+                if (Array.isArray(localL)) localL.forEach((id: string) => userLikedSet.add(id));
+                const localR = JSON.parse(localStorage.getItem(`velo_user_reposts_${userUid}`) || '[]');
+                if (Array.isArray(localR)) localR.forEach((id: string) => userRepostedSet.add(id));
+              } catch {}
+            }
+
+            if (server.comments && typeof server.comments === 'object') {
+              setComments(server.comments);
+              safeLocalStorageSet(STORAGE_KEYS.COMMENTS, JSON.stringify(server.comments));
+            }
+
             if (server.posts && Array.isArray(server.posts)) {
-              const cleanPosts = (server.posts as Post[]).filter(
-                (p) => !DUMMY_IDS.has(p.id) && !DUMMY_IDS.has(p.authorId) && !p.isArchived && !activeArchivedPostIds.has(p.id)
-              );
+              const cleanPosts = (server.posts as Post[])
+                .filter(
+                  (p) => !DUMMY_IDS.has(p.id) && !DUMMY_IDS.has(p.authorId) && !p.isArchived && !activeArchivedPostIds.has(p.id)
+                )
+                .map((p) => {
+                  const isLiked = userUid ? userLikedSet.has(p.id) : false;
+                  const isReposted = userUid ? userRepostedSet.has(p.id) : false;
+                  const likesCount = server.likes?.[p.id]?.length ?? p.likesCount;
+                  const repostsCount = server.reposts?.[p.id]?.length ?? p.repostsCount;
+                  let commentsCount = p.commentsCount;
+                  if (server.comments?.[p.id] && Array.isArray(server.comments[p.id])) {
+                    let total = 0;
+                    server.comments[p.id].forEach((c: Comment) => {
+                      total++;
+                      if (c.replies) total += c.replies.length;
+                    });
+                    commentsCount = total;
+                  }
+                  return {
+                    ...p,
+                    isLiked,
+                    isReposted,
+                    likesCount,
+                    repostsCount,
+                    commentsCount,
+                  };
+                });
               setPosts(cleanPosts);
               safeLocalStorageSet(STORAGE_KEYS.POSTS, JSON.stringify(cleanPosts));
             }
@@ -516,10 +571,64 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   return Array.from(map.values());
                 });
               }
+              const curUid = currentUser?.id;
+              const curLikedSet = new Set<string>();
+              const curRepostedSet = new Set<string>();
+              if (curUid) {
+                if (server.likes) {
+                  Object.entries(server.likes).forEach(([postId, userIds]) => {
+                    if (Array.isArray(userIds) && userIds.includes(curUid)) {
+                      curLikedSet.add(postId);
+                    }
+                  });
+                }
+                if (server.reposts) {
+                  Object.entries(server.reposts).forEach(([postId, userIds]) => {
+                    if (Array.isArray(userIds) && userIds.includes(curUid)) {
+                      curRepostedSet.add(postId);
+                    }
+                  });
+                }
+                try {
+                  const localL = JSON.parse(localStorage.getItem(`velo_user_likes_${curUid}`) || '[]');
+                  if (Array.isArray(localL)) localL.forEach((id: string) => curLikedSet.add(id));
+                  const localR = JSON.parse(localStorage.getItem(`velo_user_reposts_${curUid}`) || '[]');
+                  if (Array.isArray(localR)) localR.forEach((id: string) => curRepostedSet.add(id));
+                } catch {}
+              }
+
+              if (server.comments && typeof server.comments === 'object') {
+                setComments(server.comments);
+              }
+
               if (server.posts) {
-                const cleanPosts = (server.posts as Post[]).filter(
-                  (p) => !DUMMY_IDS.has(p.id) && !DUMMY_IDS.has(p.authorId) && !p.isArchived && !activeArchivedPostIds.has(p.id)
-                );
+                const cleanPosts = (server.posts as Post[])
+                  .filter(
+                    (p) => !DUMMY_IDS.has(p.id) && !DUMMY_IDS.has(p.authorId) && !p.isArchived && !activeArchivedPostIds.has(p.id)
+                  )
+                  .map((p) => {
+                    const isLiked = curUid ? curLikedSet.has(p.id) : false;
+                    const isReposted = curUid ? curRepostedSet.has(p.id) : false;
+                    const likesCount = server.likes?.[p.id]?.length ?? p.likesCount;
+                    const repostsCount = server.reposts?.[p.id]?.length ?? p.repostsCount;
+                    let commentsCount = p.commentsCount;
+                    if (server.comments?.[p.id] && Array.isArray(server.comments[p.id])) {
+                      let total = 0;
+                      server.comments[p.id].forEach((c: Comment) => {
+                        total++;
+                        if (c.replies) total += c.replies.length;
+                      });
+                      commentsCount = total;
+                    }
+                    return {
+                      ...p,
+                      isLiked,
+                      isReposted,
+                      likesCount,
+                      repostsCount,
+                      commentsCount,
+                    };
+                  });
                 setPosts((prev) => {
                   if (prev.length === cleanPosts.length) {
                     const isIdentical = prev.every(
@@ -787,13 +896,21 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const toggleLikePost = (postId: string) => {
+    if (!currentUser) return;
+    const localLikesKey = `velo_user_likes_${currentUser.id}`;
+    let userLikes: string[] = [];
+    try {
+      userLikes = JSON.parse(localStorage.getItem(localLikesKey) || '[]');
+    } catch {}
+
+    let isNowLiked = false;
     setPosts((prev) =>
       prev.map((p) => {
         if (p.id === postId) {
-          const isLiked = !p.isLiked;
+          isNowLiked = !p.isLiked;
 
           // Dispatch notification if newly liked and not author
-          if (isLiked && currentUser && p.authorId !== currentUser.id) {
+          if (isNowLiked && p.authorId !== currentUser.id) {
             const newAct: Activity = {
               id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
               type: 'like',
@@ -809,23 +926,39 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           return {
             ...p,
-            isLiked,
-            likesCount: isLiked ? p.likesCount + 1 : Math.max(0, p.likesCount - 1),
+            isLiked: isNowLiked,
+            likesCount: isNowLiked ? p.likesCount + 1 : Math.max(0, p.likesCount - 1),
           };
         }
         return p;
       })
     );
+
+    if (userLikes.includes(postId)) {
+      userLikes = userLikes.filter((id) => id !== postId);
+    } else {
+      userLikes.push(postId);
+    }
+    safeLocalStorageSet(localLikesKey, JSON.stringify(userLikes));
+    syncToServer('TOGGLE_LIKE_POST', { postId, userId: currentUser.id });
   };
 
   const toggleRepostPost = (postId: string) => {
+    if (!currentUser) return;
+    const localRepostsKey = `velo_user_reposts_${currentUser.id}`;
+    let userReposts: string[] = [];
+    try {
+      userReposts = JSON.parse(localStorage.getItem(localRepostsKey) || '[]');
+    } catch {}
+
+    let isNowReposted = false;
     setPosts((prev) =>
       prev.map((p) => {
         if (p.id === postId) {
-          const isReposted = !p.isReposted;
+          isNowReposted = !p.isReposted;
 
           // Dispatch notification if newly reposted and not author
-          if (isReposted && currentUser && p.authorId !== currentUser.id) {
+          if (isNowReposted && p.authorId !== currentUser.id) {
             const newAct: Activity = {
               id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
               type: 'repost',
@@ -841,13 +974,21 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           return {
             ...p,
-            isReposted,
-            repostsCount: isReposted ? p.repostsCount + 1 : Math.max(0, p.repostsCount - 1),
+            isReposted: isNowReposted,
+            repostsCount: isNowReposted ? p.repostsCount + 1 : Math.max(0, p.repostsCount - 1),
           };
         }
         return p;
       })
     );
+
+    if (userReposts.includes(postId)) {
+      userReposts = userReposts.filter((id) => id !== postId);
+    } else {
+      userReposts.push(postId);
+    }
+    safeLocalStorageSet(localRepostsKey, JSON.stringify(userReposts));
+    syncToServer('TOGGLE_REPOST_POST', { postId, userId: currentUser.id });
   };
 
   const toggleBookmarkPost = (postId: string) => {
@@ -975,6 +1116,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       syncToServer('ADD_ACTIVITY', { activity: newAct });
     }
 
+    syncToServer('ADD_COMMENT', { postId, comment: newComment, parentId });
     showToast('Reply published', 'success');
   };
 

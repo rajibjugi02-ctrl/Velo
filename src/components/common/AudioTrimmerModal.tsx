@@ -19,8 +19,17 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
 }) => {
   // Read real track duration or probe from file
   const [totalTrackDuration, setTotalTrackDuration] = useState<number>(() => {
+    if (song.fullDuration && song.fullDuration > 0) {
+      return Math.round(song.fullDuration);
+    }
     return Math.max(30, Math.round(song.duration || 30));
   });
+
+  useEffect(() => {
+    if (song.fullDuration && song.fullDuration > 0) {
+      setTotalTrackDuration(Math.round(song.fullDuration));
+    }
+  }, [song.fullDuration]);
 
   // Selected clip duration: minimum 15s, maximum 30s
   const [clipDuration, setClipDuration] = useState<number>(() => {
@@ -61,7 +70,7 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
     const handleLoadedMetadata = () => {
       if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
         const probed = Math.round(audio.duration);
-        setTotalTrackDuration(Math.max(15, probed));
+        setTotalTrackDuration((prev) => Math.max(prev, probed));
       }
     };
 
@@ -160,7 +169,7 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto animate-in fade-in select-none">
-      <div className="relative w-full max-w-sm sm:max-w-md bg-zinc-950 text-white border border-white/10 rounded-[32px] sm:rounded-[36px] shadow-2xl flex flex-col p-5 sm:p-6 my-auto max-h-[92dvh] overflow-y-auto pb-10 box-border">
+      <div className="relative w-full max-w-sm sm:max-w-md bg-zinc-950 text-white border border-white/10 rounded-[32px] sm:rounded-[36px] shadow-2xl flex flex-col p-5 sm:p-6 my-auto max-h-[90dvh] overflow-y-auto pb-8 box-border">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
           <button
@@ -172,7 +181,7 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
           </button>
 
           <div className="flex items-center gap-2">
-            <Sliders className="w-4 h-4 text-emerald-400" />
+            <Sliders className="w-4 h-4 text-zinc-300" />
             <h3 className="text-sm font-bold tracking-tight text-white">
               Pilih Bagian Lagu (IG Style)
             </h3>
@@ -181,7 +190,7 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
           <button
             type="button"
             onClick={handleFinish}
-            className="px-4 py-1.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs tracking-wide shadow-sm hover:shadow transition-all active:scale-95"
+            className="px-4 py-1.5 rounded-full bg-white text-zinc-950 hover:bg-zinc-200 font-bold text-xs tracking-wide shadow-sm hover:shadow transition-all active:scale-95"
           >
             Selesai
           </button>
@@ -192,8 +201,9 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
           <div className="relative w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center">
             {/* Outer vinyl disc */}
             <div
-              className={`w-full h-full rounded-full bg-zinc-900 border-4 border-zinc-800 shadow-xl flex items-center justify-center overflow-hidden ${isPlaying ? 'animate-[spin_7s_linear_infinite]' : ''
-                }`}
+              className={`w-full h-full rounded-full bg-zinc-900 border-4 border-zinc-800 shadow-xl flex items-center justify-center overflow-hidden ${
+                isPlaying ? 'animate-[spin_7s_linear_infinite]' : ''
+              }`}
               style={{
                 backgroundImage:
                   'radial-gradient(circle, #18181b 35%, #27272a 40%, #18181b 45%, #27272a 55%, #18181b 60%)',
@@ -223,8 +233,8 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
             {song.artist}
           </p>
 
-          {/* Duration Selector: Quick Toggle & Fine Slider */}
-          <div className="w-full mt-4 flex flex-col items-center gap-2">
+          {/* Duration Selector: Preset Toggle + Fine Manual Slider (15-30s) */}
+          <div className="w-full mt-4 flex flex-col items-center gap-2.5">
             <div className="inline-flex items-center gap-2 p-1 rounded-full bg-zinc-900/90 border border-white/10 px-3 py-1">
               <span className="text-[11px] text-zinc-400 font-medium mr-1">
                 Durasi Cerita:
@@ -232,10 +242,11 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
               <button
                 type="button"
                 onClick={() => handleDurationChange(15)}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${clipDuration === 15
-                    ? 'bg-emerald-500 text-black shadow-sm'
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                  clipDuration === 15
+                    ? 'bg-white text-zinc-950 shadow-sm'
                     : 'text-zinc-400 hover:text-white'
-                  }`}
+                }`}
               >
                 15 Detik
               </button>
@@ -243,17 +254,18 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
                 type="button"
                 onClick={() => handleDurationChange(30)}
                 disabled={totalTrackDuration < 30}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${clipDuration === 30
-                    ? 'bg-emerald-500 text-black shadow-sm'
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                  clipDuration === 30
+                    ? 'bg-white text-zinc-950 shadow-sm'
                     : 'text-zinc-400 hover:text-white disabled:opacity-40'
-                  }`}
+                }`}
               >
                 30 Detik
               </button>
             </div>
 
             {/* Fine Duration Slider (15s to 30s) */}
-            <div className="w-full max-w-[260px] flex items-center justify-between gap-2 px-2 mt-1">
+            <div className="w-full max-w-[260px] flex items-center justify-between gap-2.5 px-2">
               <span className="text-[10px] text-zinc-400 font-mono">15s</span>
               <input
                 type="range"
@@ -262,9 +274,9 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
                 step={1}
                 value={clipDuration}
                 onChange={(e) => handleDurationChange(Number(e.target.value))}
-                className="flex-1 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                className="flex-1 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-white"
               />
-              <span className="text-[10px] text-emerald-400 font-bold font-mono">
+              <span className="text-[10px] text-white font-bold font-mono">
                 {clipDuration}s
               </span>
             </div>
@@ -284,10 +296,11 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
                 <div
                   key={idx}
                   style={{ height: `${height}%` }}
-                  className={`flex-1 rounded-full transition-colors duration-150 ${isInWindow
-                      ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.3)]'
-                      : 'bg-zinc-700/60'
-                    }`}
+                  className={`flex-1 rounded-full transition-colors duration-150 ${
+                    isInWindow
+                      ? 'bg-white opacity-95'
+                      : 'bg-zinc-700/50 opacity-40'
+                  }`}
                 />
               );
             })}
@@ -302,30 +315,30 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
               step={1}
               value={startTime}
               onChange={handleSliderChange}
-              className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-400 focus:outline-none"
+              className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-white focus:outline-none"
             />
           </div>
 
           {/* Timestamp Indicators */}
           <div className="flex items-center justify-between text-[11px] font-mono px-1">
-            <span className="text-emerald-400 font-semibold">
+            <span className="text-white font-semibold">
               Mulai: {formatSec(startTime)}
             </span>
             <span className="text-zinc-300">
               Selesai: {formatSec(startTime + clipDuration)}
             </span>
-            <span className="text-zinc-500">
+            <span className="text-zinc-400">
               Total: {formatSec(totalTrackDuration)}
             </span>
           </div>
         </div>
 
         {/* Circular Play / Pause Button with generous spacing */}
-        <div className="flex justify-center mt-4 pt-1 pb-2 shrink-0">
+        <div className="flex justify-center mt-3 pt-1 pb-1 shrink-0">
           <button
             type="button"
             onClick={togglePlay}
-            className="w-14 h-14 rounded-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
+            className="w-14 h-14 rounded-full bg-white hover:bg-zinc-200 text-zinc-950 flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
           >
             {isPlaying ? (
               <Pause className="w-6 h-6 fill-current" />

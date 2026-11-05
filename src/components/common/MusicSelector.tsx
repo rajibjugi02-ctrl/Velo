@@ -109,7 +109,7 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
     // Probe duration and launch trimmer
     const tempAudio = new Audio(objectUrl);
     tempAudio.onloadedmetadata = () => {
-      const dur = Math.round(tempAudio.duration) || 30;
+      const dur = Math.max(15, Math.round(tempAudio.duration) || 30);
       setCustomDuration(dur);
       setTrimStart(0);
 
@@ -119,9 +119,10 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
         artist: 'Custom Upload',
         previewUrl: objectUrl,
         isCustom: true,
-        duration: Math.min(15, dur),
+        duration: 15,
+        fullDuration: dur,
         startTime: 0,
-        endTime: Math.min(15, dur),
+        endTime: 15,
       };
       setTrimmingSong(customSong);
     };
@@ -176,6 +177,7 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
       startTime: trimStart,
       endTime: trimStart + trimDuration,
       duration: trimDuration,
+      fullDuration: customDuration,
     };
 
     setTrimmingSong(newSong);
