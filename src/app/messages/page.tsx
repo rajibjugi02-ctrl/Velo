@@ -64,6 +64,8 @@ function MessagesContent() {
   const {
     currentUser,
     allUsers,
+    followingIds,
+    followersIds,
     conversations,
     messages,
     getOrCreateConversation,
@@ -138,26 +140,63 @@ function MessagesContent() {
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Switch or create conversation if targetUserId exists
+  // Switch or create conversation if targetUserId exists (by userId or username)
   useEffect(() => {
     if (targetUserId && currentUser) {
+      const matched = allUsers.find(
+        (u) => u.id === targetUserId || u.username.toLowerCase() === targetUserId.toLowerCase()
+      );
+      const actualId = matched?.id || targetUserId;
+
       const existingConv = conversations.find(
         (c) =>
-          c.participant.id === targetUserId ||
-          (c.participantIds && c.participantIds.includes(targetUserId))
+          c.participant.id === actualId ||
+          (c.participantIds && c.participantIds.includes(actualId))
       );
       if (existingConv) {
         setActiveConvId(existingConv.id);
       } else {
-        const created = getOrCreateConversation(targetUserId);
+        const created = getOrCreateConversation(actualId);
         if (created) {
           setActiveConvId(created.id);
         }
       }
     }
-  }, [targetUserId, conversations, currentUser, getOrCreateConversation]);
+  }, [targetUserId, conversations, currentUser, allUsers, getOrCreateConversation]);
 
-  const activeConversation = conversations.find((c) => c.id === activeConvId);
+  // Combine active conversations with mutual connections who haven't messaged yet
+  const combinedConversations = React.useMemo(() => {
+    if (!currentUser) return conversations;
+
+    const existingPartnerIds = new Set<string>();
+    conversations.forEach((c) => {
+      if (c.participant?.id) existingPartnerIds.add(c.participant.id);
+      if (c.participantIds && Array.isArray(c.participantIds)) {
+        c.participantIds.forEach((pid) => {
+          if (pid !== currentUser.id) existingPartnerIds.add(pid);
+        });
+      }
+    });
+
+    const mutualConnections: Conversation[] = allUsers
+      .filter((u) => {
+        if (u.id === currentUser.id || existingPartnerIds.has(u.id)) return false;
+        const isFollowedByMe = followingIds.includes(u.id) || !!u.isFollowing;
+        const followsMe = followersIds.includes(u.id);
+        return (isFollowedByMe && followsMe) || !!u.isMutual;
+      })
+      .map((u) => ({
+        id: `conv_${[currentUser.id, u.id].sort().join('_')}`,
+        participant: u,
+        participantIds: [currentUser.id, u.id],
+        unreadCount: 0,
+        lastMessage: undefined,
+      }));
+
+    return [...conversations, ...mutualConnections];
+  }, [conversations, allUsers, currentUser, followingIds, followersIds]);
+
+  const activeConversation = combinedConversations.find((c) => c.id === activeConvId);
   const allActiveMessages = activeConvId ? messages[activeConvId] || [] : [];
 
   // Filter messages that have NOT been deleted for current user
@@ -300,7 +339,7 @@ function MessagesContent() {
     if (msg.document) docsList.push(msg.document);
   });
 
-  const filteredConversations = conversations.filter(
+  const filteredConversations = combinedConversations.filter(
     (c) =>
       c.participant.fullName.toLowerCase().includes(searchContact.toLowerCase()) ||
       c.participant.username.toLowerCase().includes(searchContact.toLowerCase()) ||
@@ -372,7 +411,13 @@ function MessagesContent() {
                 <button
                   key={conv.id}
                   onClick={() => {
-                    setActiveConvId(conv.id);
+                    const existing = conversations.find((c) => c.id === conv.id);
+                    if (!existing && conv.participant?.id) {
+                      const created = getOrCreateConversation(conv.participant.id);
+                      setActiveConvId(created ? created.id : conv.id);
+                    } else {
+                      setActiveConvId(conv.id);
+                    }
                     setViewMode('chat');
                   }}
                   className={`w-full p-3.5 flex items-start gap-3 text-left transition-colors ${
@@ -408,7 +453,9 @@ function MessagesContent() {
                     <p className="text-xs text-zinc-500 truncate mt-0.5">
                       {conv.lastMessage?.text ||
                         (conv.lastMessage?.photos?.length ? 'Shared photos' : '') ||
-                        (conv.lastMessage?.voiceNote ? 'Voice note' : 'Start chatting')}
+                        (conv.lastMessage?.voiceNote
+                          ? 'Voice note'
+                          : 'You are now connected • Tap to start chatting')}
                     </p>
                   </div>
                 </button>

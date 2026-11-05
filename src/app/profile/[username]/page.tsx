@@ -26,7 +26,18 @@ export default function UserProfilePage() {
   const router = useRouter();
   const username = params.username as string;
 
-  const { allUsers, currentUser, savedAccounts, posts, comments, toggleFollowUser, isHydrated } = useVelo();
+  const {
+    allUsers,
+    currentUser,
+    savedAccounts,
+    posts,
+    comments,
+    toggleFollowUser,
+    isProcessingFollow,
+    followingIds,
+    followersIds,
+    isHydrated,
+  } = useVelo();
   const { t } = useLanguage();
 
   const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'media' | 'links'>('posts');
@@ -235,21 +246,34 @@ export default function UserProfilePage() {
               </Link>
             ) : (
               <>
+                {((followingIds.includes(profileUser.id) && followersIds.includes(profileUser.id)) || profileUser.isMutual) ? (
+                  <button
+                    onClick={() => router.push(`/messages?user=${profileUser.id}`)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-sky-500/20 text-sky-600 dark:text-sky-300 hover:bg-sky-500/30 border border-sky-400/40 text-xs font-semibold shadow-sm transition-all active:scale-95"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{t('chat_btn')}</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => router.push(`/messages?user=${profileUser.id}`)}
+                    className="p-2 rounded-full border border-zinc-300 dark:border-white/20 hover:bg-zinc-100 dark:hover:bg-white/10 text-zinc-900 dark:text-zinc-100 transition-colors active:scale-95"
+                    title="Direct Message"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                )}
                 <button
-                  onClick={() => router.push(`/messages?user=${profileUser.id}`)}
-                  className="p-2 rounded-full border border-zinc-300 dark:border-white/20 hover:bg-zinc-100 dark:hover:bg-white/10 text-zinc-900 dark:text-zinc-100 transition-colors"
-                  title="Direct Message"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-                <button
+                  disabled={isProcessingFollow(profileUser.id)}
                   onClick={() => toggleFollowUser(profileUser.id)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all ${profileUser.isFollowing
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all active:scale-95 ${
+                    isProcessingFollow(profileUser.id) ? 'opacity-60 cursor-not-allowed' : ''
+                  } ${profileUser.isFollowing || followingIds.includes(profileUser.id)
                       ? 'border border-zinc-300 dark:border-white/20 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10'
                       : 'bg-zinc-900 text-white dark:bg-white dark:text-black hover:bg-zinc-800 dark:hover:bg-zinc-200'
                     }`}
                 >
-                  {profileUser.isFollowing ? (
+                  {profileUser.isFollowing || followingIds.includes(profileUser.id) ? (
                     <>
                       <UserCheck className="w-3.5 h-3.5" />
                       <span>{t('following_btn')}</span>
@@ -257,7 +281,7 @@ export default function UserProfilePage() {
                   ) : (
                     <>
                       <UserPlus className="w-3.5 h-3.5" />
-                      <span>{t('follow')}</span>
+                      <span>{followersIds.includes(profileUser.id) ? t('follow_back') : t('follow')}</span>
                     </>
                   )}
                 </button>

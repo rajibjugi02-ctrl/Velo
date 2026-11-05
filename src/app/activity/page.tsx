@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useVelo } from '@/context/VeloContext';
@@ -25,7 +25,9 @@ export default function ActivityPage() {
     allUsers,
     currentUser,
     toggleFollowUser,
+    isProcessingFollow,
     markActivityAsRead,
+    markAllActivitiesAsRead,
     followersIds,
     followingIds,
   } = useVelo();
@@ -33,8 +35,13 @@ export default function ActivityPage() {
 
   const [activeTab, setActiveTab] = useState<'interactions' | 'connections'>('interactions');
 
-  // Tab 1: All Activities & Notifications (Likes, Reposts, Comments, Tags, Follows)
-  const interactionActivities = activities;
+  // Automatically mark all activities as read when visiting the activity center
+  useEffect(() => {
+    markAllActivitiesAsRead();
+  }, [markAllActivitiesAsRead]);
+
+  // Tab 1: Clean Interactions only (Likes, Reposts, Comments, Replies, Tags - NO follow spam)
+  const interactionActivities = activities.filter((a) => a.type !== 'follow');
 
   // Tab 2: Follows & Connections - strictly genuine creators who follow the active user
   const followersList = React.useMemo(() => {
@@ -71,6 +78,7 @@ export default function ActivityPage() {
       case 'repost':
         return <Repeat2 className="w-4 h-4 text-emerald-400" />;
       case 'comment':
+      case 'reply':
         return <MessageCircle className="w-4 h-4 text-sky-400" />;
       case 'tag':
         return <Tag className="w-4 h-4 text-purple-400" />;
@@ -89,6 +97,8 @@ export default function ActivityPage() {
         return 'reposted your publication';
       case 'comment':
         return `commented: "${activity.commentText || ''}"`;
+      case 'reply':
+        return `replied to your comment: "${activity.commentText || ''}"`;
       case 'tag':
         return 'tagged you in a publication or story';
       case 'follow':
@@ -198,21 +208,18 @@ export default function ActivityPage() {
                   </span>
                 </div>
 
-                {/* Follow Back Action Button */}
-                {act.type === 'follow' && act.recipientId === currentUser?.id && (
+                {/* Mutual Chat Action Button if connected */}
+                {((followingIds.includes(act.actor.id) && followersIds.includes(act.actor.id)) || act.actor.isMutual) && (
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleFollowUser(act.actor.id);
+                      router.push(`/messages?user=${act.actor.id}`);
                     }}
-                    className={`ml-auto px-3.5 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all ${
-                      followingIds.includes(act.actor.id)
-                        ? 'bg-zinc-200 dark:bg-white/10 text-zinc-700 dark:text-zinc-300'
-                        : 'bg-sky-500 hover:bg-sky-400 text-white font-bold shadow-sm'
-                    }`}
+                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-500/15 text-sky-600 dark:text-sky-300 hover:bg-sky-500/25 border border-sky-400/30 text-xs font-semibold shrink-0 transition-all active:scale-95"
                   >
-                    {followingIds.includes(act.actor.id) ? t('following_btn') : t('follow_back')}
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{t('chat_btn')}</span>
                   </button>
                 )}
 
@@ -256,7 +263,9 @@ export default function ActivityPage() {
             </div>
           ) : (
             followersList.map((user) => {
-              const isMutual = !!user.isMutual || !!user.isFollowing || followersIds.includes(user.id);
+              const isFollowingUser = followingIds.includes(user.id) || !!user.isFollowing;
+              const isFollowerOfUser = followersIds.includes(user.id);
+              const isMutual = (isFollowingUser && isFollowerOfUser) || !!user.isMutual;
 
               return (
                 <div
@@ -291,22 +300,25 @@ export default function ActivityPage() {
                     {isMutual && (
                       <button
                         onClick={() => router.push(`/messages?user=${user.id}`)}
-                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-sky-500/20 text-sky-600 dark:text-sky-300 hover:bg-sky-500/30 border border-sky-400/40 text-xs font-semibold shadow-sm transition-all"
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-sky-500/20 text-sky-600 dark:text-sky-300 hover:bg-sky-500/30 border border-sky-400/40 text-xs font-semibold shadow-sm transition-all active:scale-95"
                       >
                         <Send className="w-3.5 h-3.5" />
                         <span>{t('chat_btn')}</span>
                       </button>
                     )}
 
-                    {/* Follow Back / Following Button */}
+                    {/* Follow Back / Following Button with In-Flight Lock */}
                     <button
+                      disabled={isProcessingFollow(user.id)}
                       onClick={() => toggleFollowUser(user.id)}
-                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${user.isFollowing
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95 ${
+                        isProcessingFollow(user.id) ? 'opacity-60 cursor-not-allowed' : ''
+                      } ${isFollowingUser
                           ? 'bg-zinc-200 dark:bg-white/10 text-zinc-800 dark:text-neutral-300 hover:bg-rose-500/20 hover:text-rose-500 border border-transparent dark:border-white/10'
                           : 'bg-zinc-900 dark:bg-white text-white dark:text-black hover:opacity-90 shadow-sm'
                         }`}
                     >
-                      {user.isFollowing ? (
+                      {isFollowingUser ? (
                         <>
                           <UserCheck className="w-3.5 h-3.5 text-sky-400" />
                           <span>{t('following_btn')}</span>

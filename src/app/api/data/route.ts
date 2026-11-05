@@ -351,14 +351,38 @@ export async function POST(req: Request) {
       case 'ADD_ACTIVITY': {
         const { activity } = payload;
         if (activity && activity.id) {
-          db.activities = [activity, ...(db.activities || []).filter((a) => a.id !== activity.id)];
+          // Never record self-notifications (e.g. like/repost/comment own post)
+          if (activity.actor?.id && activity.recipientId && activity.actor.id === activity.recipientId) {
+            break;
+          }
+          if (!db.activities) db.activities = [];
+          db.activities = [activity, ...db.activities.filter((a) => a.id !== activity.id)];
+        }
+        break;
+      }
+
+      case 'MARK_ACTIVITY_READ': {
+        const { activityId } = payload;
+        if (activityId && db.activities) {
+          const act = db.activities.find((a) => a.id === activityId);
+          if (act) act.isRead = true;
+        }
+        break;
+      }
+
+      case 'MARK_ALL_ACTIVITIES_READ': {
+        const { recipientId } = payload;
+        if (recipientId && db.activities) {
+          db.activities.forEach((a) => {
+            if (a.recipientId === recipientId) a.isRead = true;
+          });
         }
         break;
       }
 
       case 'TOGGLE_FOLLOW': {
         const { followerId, followingId, actor, targetUser, isFollow } = payload;
-        if (followerId && followingId) {
+        if (followerId && followingId && followerId !== followingId) {
           if (!db.follows) db.follows = {};
           if (!db.follows[followingId]) db.follows[followingId] = [];
 
@@ -378,26 +402,26 @@ export async function POST(req: Request) {
           const shouldFollow = typeof isFollow === 'boolean' ? isFollow : !currentlyFollowing;
 
           if (shouldFollow) {
-            if (!db.follows[followingId].includes(followerId)) {
+            if (!currentlyFollowing) {
               db.follows[followingId].push(followerId);
             }
-            // Follow notification addressed specifically to the recipient (followingId)
-            if (actor && followingId !== followerId) {
-              const newAct: Activity = {
-                id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-                type: 'follow',
-                actor,
-                recipientId: followingId,
-                createdAt: new Date().toISOString(),
-                isRead: false,
-              };
+            // Idempotent follow notification: strictly 1 notification per follower-recipient pair
+            if (actor) {
               if (!db.activities) db.activities = [];
-              db.activities = [
-                newAct,
-                ...db.activities.filter(
-                  (a) => !(a.type === 'follow' && a.actor?.id === followerId && a.recipientId === followingId)
-                ),
-              ];
+              const alreadyHasFollowNotif = db.activities.some(
+                (a) => a.type === 'follow' && a.actor?.id === followerId && a.recipientId === followingId
+              );
+              if (!alreadyHasFollowNotif) {
+                const newAct: Activity = {
+                  id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+                  type: 'follow',
+                  actor,
+                  recipientId: followingId,
+                  createdAt: new Date().toISOString(),
+                  isRead: false,
+                };
+                db.activities.unshift(newAct);
+              }
             }
           } else {
             db.follows[followingId] = db.follows[followingId].filter((id) => id !== followerId);

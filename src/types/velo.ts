@@ -149,7 +149,7 @@ export interface Conversation {
 
 export interface Activity {
   id: string;
-  type: 'like' | 'repost' | 'comment' | 'tag' | 'follow';
+  type: 'like' | 'repost' | 'comment' | 'reply' | 'tag' | 'follow';
   actor: User;
   recipientId?: string;
   targetPostId?: string;

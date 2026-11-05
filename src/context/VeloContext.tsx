@@ -104,6 +104,7 @@ interface VeloContextType {
 
   // Users & Follow
   toggleFollowUser: (userId: string) => void;
+  isProcessingFollow: (userId: string) => boolean;
   blockUser: (userId: string) => void;
   unblockUser: (userId: string) => void;
   muteUser: (userId: string) => void;
@@ -132,6 +133,7 @@ interface VeloContextType {
 
   // Activity
   markActivityAsRead: (activityId: string) => void;
+  markAllActivitiesAsRead: () => void;
 
   // Settings
   updateSettings: (updated: Partial<VeloSettings>) => void;
@@ -240,6 +242,9 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return [];
   });
+
+  const [processingFollowIds, setProcessingFollowIds] = useState<string[]>([]);
+  const isProcessingFollow = (userId: string) => processingFollowIds.includes(userId);
 
   const [savedAccounts, setSavedAccounts] = useState<User[]>(() => {
     if (typeof window !== 'undefined') {
@@ -594,7 +599,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsHydrated(true);
     }
 
-    // Real-time synchronization interval across devices (every 4.5s)
+    // Real-time synchronization interval across devices (every 2.5s)
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetch('/api/data', { cache: 'no-store' })
@@ -822,7 +827,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
           })
           .catch(() => {});
       }
-    }, 4500);
+    }, 2500);
 
     return () => clearInterval(interval);
   }, []);
@@ -1029,6 +1034,26 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPosts(updated);
     safeLocalStorageSet(STORAGE_KEYS.POSTS, JSON.stringify(updated));
     syncToServer('ADD_POST', { post: newPost });
+
+    // Notify tagged users
+    if (data.taggedUsers && data.taggedUsers.length > 0 && currentUser) {
+      data.taggedUsers.forEach((tu) => {
+        if (tu.id !== currentUser.id) {
+          const newAct: Activity = {
+            id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+            type: 'tag',
+            actor: currentUser,
+            recipientId: tu.id,
+            targetPostId: newPost.id,
+            createdAt: new Date().toISOString(),
+            isRead: false,
+          };
+          setActivities((acts) => [newAct, ...acts]);
+          syncToServer('ADD_ACTIVITY', { activity: newAct });
+        }
+      });
+    }
+
     showToast('Post published', 'success');
     return newPost;
   };
@@ -1237,21 +1262,41 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((p) => (p.id === postId ? { ...p, commentsCount: p.commentsCount + 1 } : p))
     );
 
-    // Trigger comment/reply notification to post author
-    const targetPost = posts.find((p) => p.id === postId);
-    if (targetPost && targetPost.authorId !== currentUser.id) {
-      const newAct: Activity = {
-        id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-        type: 'comment',
-        actor: currentUser,
-        recipientId: targetPost.authorId,
-        targetPostId: postId,
-        commentText: content,
-        createdAt: new Date().toISOString(),
-        isRead: false,
-      };
-      setActivities((acts) => [newAct, ...acts]);
-      syncToServer('ADD_ACTIVITY', { activity: newAct });
+    // Send activity notifications: 'reply' for nested replies, 'comment' for top-level comments
+    if (parentId) {
+      const postComments = comments[postId] || [];
+      const parentComment = postComments.find((c) => c.id === parentId);
+      const parentAuthorId = parentComment?.author?.id;
+      if (parentAuthorId && parentAuthorId !== currentUser.id) {
+        const replyAct: Activity = {
+          id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          type: 'reply',
+          actor: currentUser,
+          recipientId: parentAuthorId,
+          targetPostId: postId,
+          commentText: content,
+          createdAt: new Date().toISOString(),
+          isRead: false,
+        };
+        setActivities((acts) => [replyAct, ...acts]);
+        syncToServer('ADD_ACTIVITY', { activity: replyAct });
+      }
+    } else {
+      const targetPost = posts.find((p) => p.id === postId);
+      if (targetPost && targetPost.authorId !== currentUser.id) {
+        const commentAct: Activity = {
+          id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          type: 'comment',
+          actor: currentUser,
+          recipientId: targetPost.authorId,
+          targetPostId: postId,
+          commentText: content,
+          createdAt: new Date().toISOString(),
+          isRead: false,
+        };
+        setActivities((acts) => [commentAct, ...acts]);
+        syncToServer('ADD_ACTIVITY', { activity: commentAct });
+      }
     }
 
     syncToServer('ADD_COMMENT', { postId, comment: newComment, parentId });
@@ -1310,6 +1355,26 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setStories(updated);
     safeLocalStorageSet(STORAGE_KEYS.STORIES, JSON.stringify(updated));
     syncToServer('ADD_STORY', { story: newStory });
+
+    // Notify tagged users in story
+    if (data.taggedUsers && data.taggedUsers.length > 0 && currentUser) {
+      data.taggedUsers.forEach((tu) => {
+        if (tu.id !== currentUser.id) {
+          const newAct: Activity = {
+            id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+            type: 'tag',
+            actor: currentUser,
+            recipientId: tu.id,
+            targetStoryId: newStory.id,
+            createdAt: new Date().toISOString(),
+            isRead: false,
+          };
+          setActivities((acts) => [newAct, ...acts]);
+          syncToServer('ADD_ACTIVITY', { activity: newAct });
+        }
+      });
+    }
+
     showToast('Story published', 'success');
     return newStory;
   };
@@ -1381,52 +1446,62 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     showToast('Archived story deleted', 'info');
   };
 
-  // Follow & Users (Real-time and genuine tracking)
-  const toggleFollowUser = (userId: string) => {
-    if (!currentUser) return;
-    const isCurrentlyFollowing = followingIds.includes(userId);
-    const shouldFollow = !isCurrentlyFollowing;
-    const nextFollowing = shouldFollow
-      ? [...followingIds.filter((id) => id !== userId), userId]
-      : followingIds.filter((id) => id !== userId);
+  // Follow & Users (Real-time and genuine tracking with in-flight lock to prevent spam)
+  const toggleFollowUser = async (userId: string) => {
+    if (!currentUser || currentUser.id === userId) return;
+    if (processingFollowIds.includes(userId)) return;
 
-    setFollowingIds(nextFollowing);
-    safeLocalStorageSet(`velo_following_${currentUser.id}`, JSON.stringify(nextFollowing));
+    setProcessingFollowIds((prev) => [...prev, userId]);
 
-    const targetUserObj = allUsers.find((u) => u.id === userId);
+    try {
+      const isCurrentlyFollowing = followingIds.includes(userId);
+      const shouldFollow = !isCurrentlyFollowing;
+      const nextFollowing = shouldFollow
+        ? [...followingIds.filter((id) => id !== userId), userId]
+        : followingIds.filter((id) => id !== userId);
 
-    syncToServer('TOGGLE_FOLLOW', {
-      followerId: currentUser.id,
-      followingId: userId,
-      actor: currentUser,
-      targetUser: targetUserObj,
-      isFollow: shouldFollow,
-    });
+      setFollowingIds(nextFollowing);
+      safeLocalStorageSet(`velo_following_${currentUser.id}`, JSON.stringify(nextFollowing));
 
-    const updatedCurrentUser: User = {
-      ...currentUser,
-      followingCount: nextFollowing.length,
-    };
-    setCurrentUser(updatedCurrentUser);
-    safeLocalStorageSet(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updatedCurrentUser));
+      const targetUserObj = allUsers.find((u) => u.id === userId);
 
-    setAllUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          return {
-            ...u,
-            isFollowing: shouldFollow,
-            followersCount: shouldFollow ? u.followersCount + 1 : Math.max(0, u.followersCount - 1),
-          };
-        }
-        if (u.id === currentUser.id) {
-          return updatedCurrentUser;
-        }
-        return u;
-      })
-    );
+      await syncToServer('TOGGLE_FOLLOW', {
+        followerId: currentUser.id,
+        followingId: userId,
+        actor: currentUser,
+        targetUser: targetUserObj,
+        isFollow: shouldFollow,
+      });
 
-    showToast(shouldFollow ? 'Following creator' : 'Unfollowed user', 'info');
+      const updatedCurrentUser: User = {
+        ...currentUser,
+        followingCount: nextFollowing.length,
+      };
+      setCurrentUser(updatedCurrentUser);
+      safeLocalStorageSet(STORAGE_KEYS.CURRENT_USER, JSON.stringify(updatedCurrentUser));
+
+      setAllUsers((prev) =>
+        prev.map((u) => {
+          if (u.id === userId) {
+            return {
+              ...u,
+              isFollowing: shouldFollow,
+              followersCount: shouldFollow ? u.followersCount + 1 : Math.max(0, u.followersCount - 1),
+            };
+          }
+          if (u.id === currentUser.id) {
+            return updatedCurrentUser;
+          }
+          return u;
+        })
+      );
+
+      showToast(shouldFollow ? 'Following creator' : 'Unfollowed user', 'info');
+    } finally {
+      setTimeout(() => {
+        setProcessingFollowIds((prev) => prev.filter((id) => id !== userId));
+      }, 400);
+    }
   };
 
   const blockUser = (userId: string) => {
@@ -1662,9 +1737,24 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const markActivityAsRead = (activityId: string) => {
-    setActivities((prev) =>
-      prev.map((a) => (a.id === activityId ? { ...a, isRead: true } : a))
-    );
+    setActivities((prev) => {
+      const updated = prev.map((a) => (a.id === activityId ? { ...a, isRead: true } : a));
+      safeLocalStorageSet(STORAGE_KEYS.ACTIVITIES, JSON.stringify(updated));
+      return updated;
+    });
+    syncToServer('MARK_ACTIVITY_READ', { activityId });
+  };
+
+  const markAllActivitiesAsRead = () => {
+    if (!currentUser) return;
+    setActivities((prev) => {
+      const updated = prev.map((a) =>
+        a.recipientId === currentUser.id ? { ...a, isRead: true } : a
+      );
+      safeLocalStorageSet(STORAGE_KEYS.ACTIVITIES, JSON.stringify(updated));
+      return updated;
+    });
+    syncToServer('MARK_ALL_ACTIVITIES_READ', { userId: currentUser.id });
   };
 
   const updateSettings = (updated: Partial<VeloSettings>) => {
@@ -1754,6 +1844,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         restoreArchivedStory,
         deleteArchivedStoryPermanently,
         toggleFollowUser,
+        isProcessingFollow,
         blockUser,
         unblockUser,
         muteUser,
@@ -1768,6 +1859,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteConversation,
         clearConversationMessages,
         markActivityAsRead,
+        markAllActivitiesAsRead,
         updateSettings,
         clearAppCache,
       }}
