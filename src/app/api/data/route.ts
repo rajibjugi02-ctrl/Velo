@@ -52,10 +52,45 @@ export async function POST(req: Request) {
         break;
       }
 
+      case 'ARCHIVE_POST': {
+        const { postId } = payload;
+        if (postId) {
+          const postToArchive = db.posts.find((p) => p.id === postId);
+          if (postToArchive) {
+            db.posts = db.posts.filter((p) => p.id !== postId);
+            if (!db.archivedPosts) db.archivedPosts = [];
+            db.archivedPosts = [
+              { ...postToArchive, isArchived: true },
+              ...db.archivedPosts.filter((p) => p.id !== postId),
+            ];
+          }
+        }
+        break;
+      }
+
+      case 'RESTORE_POST': {
+        const { postId } = payload;
+        if (postId) {
+          if (!db.archivedPosts) db.archivedPosts = [];
+          const postToRestore = db.archivedPosts.find((p) => p.id === postId);
+          if (postToRestore) {
+            db.archivedPosts = db.archivedPosts.filter((p) => p.id !== postId);
+            db.posts = [
+              { ...postToRestore, isArchived: false },
+              ...db.posts.filter((p) => p.id !== postId),
+            ];
+          }
+        }
+        break;
+      }
+
       case 'DELETE_POST': {
         const { postId } = payload;
         if (postId) {
           db.posts = db.posts.filter((p) => p.id !== postId);
+          if (db.archivedPosts) {
+            db.archivedPosts = db.archivedPosts.filter((p) => p.id !== postId);
+          }
         }
         break;
       }
@@ -102,10 +137,53 @@ export async function POST(req: Request) {
         break;
       }
 
+      case 'ARCHIVE_STORY': {
+        const { storyId } = payload;
+        if (storyId) {
+          const storyToArchive = db.stories.find((s) => s.id === storyId);
+          if (storyToArchive) {
+            db.stories = db.stories.filter((s) => s.id !== storyId);
+            if (!db.archivedStories) db.archivedStories = [];
+            db.archivedStories = [
+              { ...storyToArchive, isArchived: true },
+              ...db.archivedStories.filter((s) => s.id !== storyId),
+            ];
+          }
+        }
+        break;
+      }
+
+      case 'RESTORE_STORY': {
+        const { storyId } = payload;
+        if (storyId) {
+          if (!db.archivedStories) db.archivedStories = [];
+          const storyToRestore = db.archivedStories.find((s) => s.id === storyId);
+          if (storyToRestore) {
+            db.archivedStories = db.archivedStories.filter((s) => s.id !== storyId);
+            db.stories = [
+              { ...storyToRestore, isArchived: false },
+              ...db.stories.filter((s) => s.id !== storyId),
+            ];
+          }
+        }
+        break;
+      }
+
       case 'DELETE_STORY': {
         const { storyId } = payload;
         if (storyId) {
           db.stories = db.stories.filter((s) => s.id !== storyId);
+          if (db.archivedStories) {
+            db.archivedStories = db.archivedStories.filter((s) => s.id !== storyId);
+          }
+        }
+        break;
+      }
+
+      case 'DELETE_ARCHIVED_STORY': {
+        const { storyId } = payload;
+        if (storyId && db.archivedStories) {
+          db.archivedStories = db.archivedStories.filter((s) => s.id !== storyId);
         }
         break;
       }
@@ -156,6 +234,22 @@ export async function POST(req: Request) {
             const idx = db.stories.findIndex((item) => item.id === s.id);
             if (idx !== -1) db.stories[idx] = s;
             else db.stories.unshift(s);
+          });
+        }
+        if (payload.archivedPosts) {
+          if (!db.archivedPosts) db.archivedPosts = [];
+          payload.archivedPosts.forEach((p: Post) => {
+            const idx = db.archivedPosts.findIndex((item) => item.id === p.id);
+            if (idx !== -1) db.archivedPosts[idx] = p;
+            else db.archivedPosts.unshift(p);
+          });
+        }
+        if (payload.archivedStories) {
+          if (!db.archivedStories) db.archivedStories = [];
+          payload.archivedStories.forEach((s: Story) => {
+            const idx = db.archivedStories.findIndex((item) => item.id === s.id);
+            if (idx !== -1) db.archivedStories[idx] = s;
+            else db.archivedStories.unshift(s);
           });
         }
         break;

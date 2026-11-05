@@ -54,23 +54,27 @@ export const PostCard: React.FC<PostCardProps> = ({ post, isDetailView = false }
   const shareRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLElement | null>(null);
 
-  // Auto-play / pause audio when post card is centered in viewport
+  // Auto-play / pause audio when post card is centered in viewport with hysteresis
+  const songUrl = post.song?.previewUrl;
+  const songId = post.song?.id;
+
   useEffect(() => {
-    if (!post.song || isDetailView) return;
+    if (!songUrl || isDetailView) return;
     const element = cardRef.current;
     if (!element) return;
 
+    // Use hysteresis: enter threshold >= 0.6, exit threshold < 0.2
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.65) {
-            globalAudio.play(post.id, post.song!);
-          } else if (!entry.isIntersecting || entry.intersectionRatio < 0.65) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+            globalAudio.play(post.id, post.song!, true);
+          } else if (entry.intersectionRatio < 0.2) {
             globalAudio.pause(post.id);
           }
         });
       },
-      { threshold: 0.65 }
+      { threshold: [0.2, 0.6] }
     );
 
     observer.observe(element);
@@ -79,7 +83,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, isDetailView = false }
       observer.disconnect();
       globalAudio.pause(post.id);
     };
-  }, [post.id, post.song, isDetailView]);
+  }, [post.id, songId, songUrl, isDetailView]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

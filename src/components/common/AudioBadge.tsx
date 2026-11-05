@@ -24,8 +24,8 @@ export const AudioBadge: React.FC<AudioBadgeProps> = ({
   const effectiveId = postId || fallbackId;
 
   useEffect(() => {
-    const unsubscribe = globalAudio.subscribe((activeId) => {
-      setIsPlaying(activeId === effectiveId);
+    const unsubscribe = globalAudio.subscribe((activeId, isAudioPlaying) => {
+      setIsPlaying(activeId === effectiveId && isAudioPlaying);
     });
     return unsubscribe;
   }, [effectiveId]);

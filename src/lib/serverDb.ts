@@ -5,7 +5,9 @@ import { User, Post, Story, Conversation, Message, Comment, Activity } from '@/t
 export interface VeloServerDb {
   users: User[];
   posts: Post[];
+  archivedPosts: Post[];
   stories: Story[];
+  archivedStories: Story[];
   conversations: Conversation[];
   messages: Record<string, Message[]>;
   comments: Record<string, Comment[]>;
@@ -24,7 +26,9 @@ function getEmptyDb(): VeloServerDb {
   return {
     users: [],
     posts: [],
+    archivedPosts: [],
     stories: [],
+    archivedStories: [],
     conversations: [],
     messages: {},
     comments: {},
@@ -48,7 +52,9 @@ export function readServerDb(): VeloServerDb {
         memoryDb = {
           users: Array.isArray(parsed.users) ? parsed.users : [],
           posts: Array.isArray(parsed.posts) ? parsed.posts : [],
+          archivedPosts: Array.isArray(parsed.archivedPosts) ? parsed.archivedPosts : [],
           stories: Array.isArray(parsed.stories) ? parsed.stories : [],
+          archivedStories: Array.isArray(parsed.archivedStories) ? parsed.archivedStories : [],
           conversations: Array.isArray(parsed.conversations) ? parsed.conversations : [],
           messages: parsed.messages || {},
           comments: parsed.comments || {},

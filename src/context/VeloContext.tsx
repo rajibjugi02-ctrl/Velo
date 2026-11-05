@@ -320,12 +320,28 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
         safeLocalStorageSet(STORAGE_KEYS.POSTS, JSON.stringify(filtered));
       }
 
+      const storedArchivedPosts = localStorage.getItem(STORAGE_KEYS.ARCHIVED_POSTS);
+      if (storedArchivedPosts) {
+        try {
+          const parsed: Post[] = JSON.parse(storedArchivedPosts);
+          setArchivedPosts(parsed);
+        } catch {}
+      }
+
       const storedStories = localStorage.getItem(STORAGE_KEYS.STORIES);
       if (storedStories) {
         const parsed: Story[] = JSON.parse(storedStories);
         const filtered = parsed.filter((s) => !DUMMY_IDS.has(s.id) && !DUMMY_IDS.has(s.authorId));
         setStories(filtered);
         safeLocalStorageSet(STORAGE_KEYS.STORIES, JSON.stringify(filtered));
+      }
+
+      const storedArchivedStories = localStorage.getItem(STORAGE_KEYS.ARCHIVED_STORIES);
+      if (storedArchivedStories) {
+        try {
+          const parsed: Story[] = JSON.parse(storedArchivedStories);
+          setArchivedStories(parsed);
+        } catch {}
       }
 
       const storedUsers = localStorage.getItem(STORAGE_KEYS.ALL_USERS);
@@ -365,16 +381,45 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 return merged;
               });
             }
+
+            const activeArchivedPostIds = new Set<string>();
+            if (server.archivedPosts && Array.isArray(server.archivedPosts)) {
+              setArchivedPosts(server.archivedPosts);
+              safeLocalStorageSet(STORAGE_KEYS.ARCHIVED_POSTS, JSON.stringify(server.archivedPosts));
+              server.archivedPosts.forEach((p: Post) => activeArchivedPostIds.add(p.id));
+            } else {
+              const localArchived = localStorage.getItem(STORAGE_KEYS.ARCHIVED_POSTS);
+              if (localArchived) {
+                try {
+                  JSON.parse(localArchived).forEach((p: Post) => activeArchivedPostIds.add(p.id));
+                } catch {}
+              }
+            }
+
+            const activeArchivedStoryIds = new Set<string>();
+            if (server.archivedStories && Array.isArray(server.archivedStories)) {
+              setArchivedStories(server.archivedStories);
+              safeLocalStorageSet(STORAGE_KEYS.ARCHIVED_STORIES, JSON.stringify(server.archivedStories));
+              server.archivedStories.forEach((s: Story) => activeArchivedStoryIds.add(s.id));
+            } else {
+              const localArchivedS = localStorage.getItem(STORAGE_KEYS.ARCHIVED_STORIES);
+              if (localArchivedS) {
+                try {
+                  JSON.parse(localArchivedS).forEach((s: Story) => activeArchivedStoryIds.add(s.id));
+                } catch {}
+              }
+            }
+
             if (server.posts && Array.isArray(server.posts)) {
               const cleanPosts = (server.posts as Post[]).filter(
-                (p) => !DUMMY_IDS.has(p.id) && !DUMMY_IDS.has(p.authorId)
+                (p) => !DUMMY_IDS.has(p.id) && !DUMMY_IDS.has(p.authorId) && !p.isArchived && !activeArchivedPostIds.has(p.id)
               );
               setPosts(cleanPosts);
               safeLocalStorageSet(STORAGE_KEYS.POSTS, JSON.stringify(cleanPosts));
             }
             if (server.stories && Array.isArray(server.stories)) {
               const cleanStories = (server.stories as Story[]).filter(
-                (s) => !DUMMY_IDS.has(s.id) && !DUMMY_IDS.has(s.authorId)
+                (s) => !DUMMY_IDS.has(s.id) && !DUMMY_IDS.has(s.authorId) && !s.isArchived && !activeArchivedStoryIds.has(s.id)
               );
               setStories(cleanStories);
               safeLocalStorageSet(STORAGE_KEYS.STORIES, JSON.stringify(cleanStories));
@@ -407,6 +452,35 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .then((json) => {
             if (json.success && json.data) {
               const server = json.data;
+
+              const activeArchivedPostIds = new Set<string>();
+              if (server.archivedPosts && Array.isArray(server.archivedPosts)) {
+                setArchivedPosts(server.archivedPosts);
+                safeLocalStorageSet(STORAGE_KEYS.ARCHIVED_POSTS, JSON.stringify(server.archivedPosts));
+                server.archivedPosts.forEach((p: Post) => activeArchivedPostIds.add(p.id));
+              } else {
+                const localArchived = localStorage.getItem(STORAGE_KEYS.ARCHIVED_POSTS);
+                if (localArchived) {
+                  try {
+                    JSON.parse(localArchived).forEach((p: Post) => activeArchivedPostIds.add(p.id));
+                  } catch {}
+                }
+              }
+
+              const activeArchivedStoryIds = new Set<string>();
+              if (server.archivedStories && Array.isArray(server.archivedStories)) {
+                setArchivedStories(server.archivedStories);
+                safeLocalStorageSet(STORAGE_KEYS.ARCHIVED_STORIES, JSON.stringify(server.archivedStories));
+                server.archivedStories.forEach((s: Story) => activeArchivedStoryIds.add(s.id));
+              } else {
+                const localArchivedS = localStorage.getItem(STORAGE_KEYS.ARCHIVED_STORIES);
+                if (localArchivedS) {
+                  try {
+                    JSON.parse(localArchivedS).forEach((s: Story) => activeArchivedStoryIds.add(s.id));
+                  } catch {}
+                }
+              }
+
               if (server.users) {
                 setAllUsers((prev) => {
                   const map = new Map<string, User>();
@@ -416,18 +490,35 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 });
               }
               if (server.posts) {
-                setPosts(
-                  (server.posts as Post[]).filter(
-                    (p) => !DUMMY_IDS.has(p.id) && !DUMMY_IDS.has(p.authorId)
-                  )
+                const cleanPosts = (server.posts as Post[]).filter(
+                  (p) => !DUMMY_IDS.has(p.id) && !DUMMY_IDS.has(p.authorId) && !p.isArchived && !activeArchivedPostIds.has(p.id)
                 );
+                setPosts((prev) => {
+                  if (prev.length === cleanPosts.length) {
+                    const isIdentical = prev.every(
+                      (p, i) =>
+                        p.id === cleanPosts[i].id &&
+                        p.likesCount === cleanPosts[i].likesCount &&
+                        p.isLiked === cleanPosts[i].isLiked &&
+                        p.repostsCount === cleanPosts[i].repostsCount &&
+                        p.commentsCount === cleanPosts[i].commentsCount
+                    );
+                    if (isIdentical) return prev;
+                  }
+                  return cleanPosts;
+                });
               }
               if (server.stories) {
-                setStories(
-                  (server.stories as Story[]).filter(
-                    (s) => !DUMMY_IDS.has(s.id) && !DUMMY_IDS.has(s.authorId)
-                  )
+                const cleanStories = (server.stories as Story[]).filter(
+                  (s) => !DUMMY_IDS.has(s.id) && !DUMMY_IDS.has(s.authorId) && !s.isArchived && !activeArchivedStoryIds.has(s.id)
                 );
+                setStories((prev) => {
+                  if (prev.length === cleanStories.length) {
+                    const isIdentical = prev.every((s, i) => s.id === cleanStories[i].id);
+                    if (isIdentical) return prev;
+                  }
+                  return cleanStories;
+                });
               }
               if (server.messages) {
                 setMessages(server.messages);
@@ -733,12 +824,13 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!postToArchive) return;
 
     const remainingPosts = posts.filter((p) => p.id !== postId);
-    const updatedArchived = [{ ...postToArchive, isArchived: true }, ...archivedPosts];
+    const updatedArchived = [{ ...postToArchive, isArchived: true }, ...archivedPosts.filter((p) => p.id !== postId)];
 
     setPosts(remainingPosts);
     setArchivedPosts(updatedArchived);
-    localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(remainingPosts));
-    localStorage.setItem(STORAGE_KEYS.ARCHIVED_POSTS, JSON.stringify(updatedArchived));
+    safeLocalStorageSet(STORAGE_KEYS.POSTS, JSON.stringify(remainingPosts));
+    safeLocalStorageSet(STORAGE_KEYS.ARCHIVED_POSTS, JSON.stringify(updatedArchived));
+    syncToServer('ARCHIVE_POST', { postId });
     showToast('Post moved to Archive', 'info');
   };
 
@@ -747,12 +839,13 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!postToRestore) return;
 
     const remainingArchived = archivedPosts.filter((p) => p.id !== postId);
-    const updatedPosts = [{ ...postToRestore, isArchived: false }, ...posts];
+    const updatedPosts = [{ ...postToRestore, isArchived: false }, ...posts.filter((p) => p.id !== postId)];
 
     setArchivedPosts(remainingArchived);
     setPosts(updatedPosts);
-    localStorage.setItem(STORAGE_KEYS.ARCHIVED_POSTS, JSON.stringify(remainingArchived));
-    localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(updatedPosts));
+    safeLocalStorageSet(STORAGE_KEYS.ARCHIVED_POSTS, JSON.stringify(remainingArchived));
+    safeLocalStorageSet(STORAGE_KEYS.POSTS, JSON.stringify(updatedPosts));
+    syncToServer('RESTORE_POST', { postId });
     showToast('Post restored to profile', 'success');
   };
 
@@ -928,12 +1021,13 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!storyToArchive) return;
 
     const remainingStories = stories.filter((s) => s.id !== storyId);
-    const updatedArchived = [{ ...storyToArchive, isArchived: true }, ...archivedStories];
+    const updatedArchived = [{ ...storyToArchive, isArchived: true }, ...archivedStories.filter((s) => s.id !== storyId)];
 
     setStories(remainingStories);
     setArchivedStories(updatedArchived);
-    localStorage.setItem(STORAGE_KEYS.STORIES, JSON.stringify(remainingStories));
-    localStorage.setItem(STORAGE_KEYS.ARCHIVED_STORIES, JSON.stringify(updatedArchived));
+    safeLocalStorageSet(STORAGE_KEYS.STORIES, JSON.stringify(remainingStories));
+    safeLocalStorageSet(STORAGE_KEYS.ARCHIVED_STORIES, JSON.stringify(updatedArchived));
+    syncToServer('ARCHIVE_STORY', { storyId });
     showToast('Story archived', 'info');
   };
 
@@ -942,19 +1036,21 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!storyToRestore) return;
 
     const remainingArchived = archivedStories.filter((s) => s.id !== storyId);
-    const updatedStories = [{ ...storyToRestore, isArchived: false }, ...stories];
+    const updatedStories = [{ ...storyToRestore, isArchived: false }, ...stories.filter((s) => s.id !== storyId)];
 
     setArchivedStories(remainingArchived);
     setStories(updatedStories);
-    localStorage.setItem(STORAGE_KEYS.ARCHIVED_STORIES, JSON.stringify(remainingArchived));
-    localStorage.setItem(STORAGE_KEYS.STORIES, JSON.stringify(updatedStories));
+    safeLocalStorageSet(STORAGE_KEYS.ARCHIVED_STORIES, JSON.stringify(remainingArchived));
+    safeLocalStorageSet(STORAGE_KEYS.STORIES, JSON.stringify(updatedStories));
+    syncToServer('RESTORE_STORY', { storyId });
     showToast('Story restored', 'success');
   };
 
   const deleteArchivedStoryPermanently = (storyId: string) => {
     const updated = archivedStories.filter((s) => s.id !== storyId);
     setArchivedStories(updated);
-    localStorage.setItem(STORAGE_KEYS.ARCHIVED_STORIES, JSON.stringify(updated));
+    safeLocalStorageSet(STORAGE_KEYS.ARCHIVED_STORIES, JSON.stringify(updated));
+    syncToServer('DELETE_ARCHIVED_STORY', { storyId });
     showToast('Archived story deleted', 'info');
   };
 
