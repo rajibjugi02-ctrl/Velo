@@ -201,9 +201,8 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
           <div className="relative w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center">
             {/* Outer vinyl disc */}
             <div
-              className={`w-full h-full rounded-full bg-zinc-900 border-4 border-zinc-800 shadow-xl flex items-center justify-center overflow-hidden ${
-                isPlaying ? 'animate-[spin_7s_linear_infinite]' : ''
-              }`}
+              className={`w-full h-full rounded-full bg-zinc-900 border-4 border-zinc-800 shadow-xl flex items-center justify-center overflow-hidden ${isPlaying ? 'animate-[spin_7s_linear_infinite]' : ''
+                }`}
               style={{
                 backgroundImage:
                   'radial-gradient(circle, #18181b 35%, #27272a 40%, #18181b 45%, #27272a 55%, #18181b 60%)',
@@ -242,11 +241,10 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
               <button
                 type="button"
                 onClick={() => handleDurationChange(15)}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                  clipDuration === 15
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${clipDuration === 15
                     ? 'bg-white text-zinc-950 shadow-sm'
                     : 'text-zinc-400 hover:text-white'
-                }`}
+                  }`}
               >
                 15 Detik
               </button>
@@ -254,11 +252,10 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
                 type="button"
                 onClick={() => handleDurationChange(30)}
                 disabled={totalTrackDuration < 30}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                  clipDuration === 30
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${clipDuration === 30
                     ? 'bg-white text-zinc-950 shadow-sm'
                     : 'text-zinc-400 hover:text-white disabled:opacity-40'
-                }`}
+                  }`}
               >
                 30 Detik
               </button>
@@ -296,11 +293,10 @@ export const AudioTrimmerModal: React.FC<AudioTrimmerModalProps> = ({
                 <div
                   key={idx}
                   style={{ height: `${height}%` }}
-                  className={`flex-1 rounded-full transition-colors duration-150 ${
-                    isInWindow
+                  className={`flex-1 rounded-full transition-colors duration-150 ${isInWindow
                       ? 'bg-white opacity-95'
                       : 'bg-zinc-700/50 opacity-40'
-                  }`}
+                    }`}
                 />
               );
             })}

@@ -43,11 +43,6 @@ function getEmptyDb(): VeloServerDb {
 }
 
 export function readServerDb(): VeloServerDb {
-  if (memoryDb) {
-    return memoryDb;
-  }
-
-  // Check writable path first, then fallback to packaged data file
   const pathsToCheck = [DB_PATH, PRIMARY_PATH];
 
   for (const p of pathsToCheck) {
@@ -55,25 +50,39 @@ export function readServerDb(): VeloServerDb {
       if (fs.existsSync(p)) {
         const raw = fs.readFileSync(p, 'utf-8');
         const parsed = JSON.parse(raw);
-        memoryDb = {
-          users: Array.isArray(parsed.users) ? parsed.users : [],
-          posts: Array.isArray(parsed.posts) ? parsed.posts : [],
+        const users: User[] = Array.isArray(parsed.users) ? parsed.users : [];
+        const posts: Post[] = Array.isArray(parsed.posts) ? parsed.posts : [];
+
+        // Auto-seed users from post authors if users array is empty
+        if (users.length === 0 && posts.length > 0) {
+          posts.forEach((post) => {
+            if (post.author && post.author.id && !users.some((u) => u.id === post.author.id)) {
+              users.push(post.author);
+            }
+          });
+        }
+
+        const db: VeloServerDb = {
+          users,
+          posts,
           archivedPosts: Array.isArray(parsed.archivedPosts) ? parsed.archivedPosts : [],
           stories: Array.isArray(parsed.stories) ? parsed.stories : [],
           archivedStories: Array.isArray(parsed.archivedStories) ? parsed.archivedStories : [],
           conversations: Array.isArray(parsed.conversations) ? parsed.conversations : [],
-          messages: parsed.messages || {},
-          comments: parsed.comments || {},
+          messages: parsed.messages && typeof parsed.messages === 'object' ? parsed.messages : {},
+          comments: parsed.comments && typeof parsed.comments === 'object' ? parsed.comments : {},
           activities: Array.isArray(parsed.activities) ? parsed.activities : [],
           follows: parsed.follows && typeof parsed.follows === 'object' ? parsed.follows : {},
           likes: parsed.likes && typeof parsed.likes === 'object' ? parsed.likes : {},
           reposts: parsed.reposts && typeof parsed.reposts === 'object' ? parsed.reposts : {},
         };
-        return memoryDb;
+        memoryDb = db;
+        return db;
       }
     } catch {}
   }
 
+  if (memoryDb) return memoryDb;
   memoryDb = getEmptyDb();
   writeServerDb(memoryDb);
   return memoryDb;

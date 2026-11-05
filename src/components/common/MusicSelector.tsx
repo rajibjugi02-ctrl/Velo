@@ -210,8 +210,8 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
             type="button"
             onClick={() => setActiveTab('catalog')}
             className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${activeTab === 'catalog'
-                ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm'
-                : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/[0.04]'
+              ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm'
+              : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/[0.04]'
               }`}
           >
             Song Catalog
@@ -220,8 +220,8 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
             type="button"
             onClick={() => setActiveTab('upload')}
             className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${activeTab === 'upload'
-                ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm'
-                : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/[0.04]'
+              ? 'bg-zinc-900 text-white dark:bg-white dark:text-black shadow-sm'
+              : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/[0.04]'
               }`}
           >
             Upload & Trim MP3
@@ -262,8 +262,8 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
                     <div
                       key={song.id}
                       className={`flex items-center justify-between p-2.5 rounded-2xl border transition-all ${isSelected
-                          ? 'bg-zinc-100 dark:bg-white/[0.08] border-zinc-300 dark:border-white/20'
-                          : 'bg-zinc-50/50 dark:bg-white/[0.02] border-zinc-200/80 dark:border-white/[0.05] hover:border-zinc-300 dark:hover:border-white/10'
+                        ? 'bg-zinc-100 dark:bg-white/[0.08] border-zinc-300 dark:border-white/20'
+                        : 'bg-zinc-50/50 dark:bg-white/[0.02] border-zinc-200/80 dark:border-white/[0.05] hover:border-zinc-300 dark:hover:border-white/10'
                         }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
@@ -272,8 +272,8 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
                           type="button"
                           onClick={() => handleTogglePreview(song)}
                           className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors ${isPreviewing
-                              ? 'bg-zinc-900 text-white dark:bg-white dark:text-black'
-                              : 'bg-zinc-200 dark:bg-white/10 text-zinc-700 dark:text-white hover:bg-zinc-300 dark:hover:bg-white/20'
+                            ? 'bg-zinc-900 text-white dark:bg-white dark:text-black'
+                            : 'bg-zinc-200 dark:bg-white/10 text-zinc-700 dark:text-white hover:bg-zinc-300 dark:hover:bg-white/20'
                             }`}
                         >
                           {isPreviewing ? (
@@ -301,8 +301,8 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
                           setTrimmingSong(song);
                         }}
                         className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all ${isSelected
-                            ? 'bg-zinc-900 text-white dark:bg-white dark:text-black'
-                            : 'bg-zinc-200 dark:bg-white/10 hover:bg-zinc-300 dark:hover:bg-white/20 text-zinc-800 dark:text-zinc-200'
+                          ? 'bg-zinc-900 text-white dark:bg-white dark:text-black'
+                          : 'bg-zinc-200 dark:bg-white/10 hover:bg-zinc-300 dark:hover:bg-white/20 text-zinc-800 dark:text-zinc-200'
                           }`}
                       >
                         {isSelected ? 'Selected' : 'Use Song'}
@@ -392,8 +392,8 @@ export const MusicSelector: React.FC<MusicSelectorProps> = ({
                         type="button"
                         onClick={() => setTrimDuration(dur)}
                         className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${trimDuration === dur
-                            ? 'bg-zinc-900 text-white dark:bg-white dark:text-black'
-                            : 'bg-zinc-200 dark:bg-white/10 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-white/20'
+                          ? 'bg-zinc-900 text-white dark:bg-white dark:text-black'
+                          : 'bg-zinc-200 dark:bg-white/10 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-white/20'
                           }`}
                       >
                         {dur}s

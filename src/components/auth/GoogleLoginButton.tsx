@@ -111,21 +111,29 @@ function RealGoogleButton({ isSwitch }: GoogleLoginButtonProps) {
 
   const loginWithGoogle = useGoogleLogin({
     onSuccess: handleOAuthSuccess,
-    onError: () => {
+    onError: (error) => {
+      console.error('Google Sign-In Error:', error);
       setIsVerifying(false);
       showToast('Google Sign-In dibatalkan atau diblokir pop-up', 'error');
     },
     flow: 'implicit',
   });
 
+  const handleStartGoogleLogin = () => {
+    if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1') {
+      showToast('Mengalihkan ke localhost:3000 untuk Google OAuth...', 'info');
+      window.location.href = window.location.href.replace('127.0.0.1', 'localhost');
+      return;
+    }
+    setIsVerifying(true);
+    loginWithGoogle();
+  };
+
   return (
     <>
       <button
         type="button"
-        onClick={() => {
-          setIsVerifying(true);
-          loginWithGoogle();
-        }}
+        onClick={handleStartGoogleLogin}
         disabled={isVerifying}
         className="w-full max-w-full h-12 px-4 py-3 rounded-xl flex items-center justify-center gap-3 text-sm sm:text-base font-medium transition-all active:scale-[0.98] bg-white hover:bg-zinc-50 dark:bg-white/[0.08] dark:hover:bg-white/[0.12] text-zinc-900 dark:text-white border border-zinc-200 dark:border-white/10 shadow-sm disabled:opacity-60 mb-4 select-none cursor-pointer"
       >

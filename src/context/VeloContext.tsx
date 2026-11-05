@@ -3,7 +3,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   User,
   Post,
@@ -205,6 +205,11 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return null;
   });
 
+  const currentUserRef = useRef<User | null>(currentUser);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
   const [followingIds, setFollowingIds] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -378,13 +383,31 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const json = await res.json();
           if (json.success && json.data) {
             const server = json.data;
+            const activeUser = currentUserRef.current;
+
+            if (activeUser && !DUMMY_IDS.has(activeUser.id)) {
+              syncToServer('REGISTER_USER', { user: activeUser });
+            }
+
             if (server.users && Array.isArray(server.users)) {
               setAllUsers((prev) => {
                 const map = new Map<string, User>();
                 prev.filter((u) => !DUMMY_IDS.has(u.id)).forEach((u) => map.set(u.id, u));
                 server.users.filter((u: User) => !DUMMY_IDS.has(u.id)).forEach((u: User) => map.set(u.id, u));
+                if (activeUser && !DUMMY_IDS.has(activeUser.id)) {
+                  map.set(activeUser.id, activeUser);
+                }
                 const merged = Array.from(map.values());
                 safeLocalStorageSet(STORAGE_KEYS.ALL_USERS, JSON.stringify(merged));
+
+                // If local state has accounts missing from server, seed server immediately
+                const missingOnServer = merged.filter(
+                  (mu) => !server.users.some((su: User) => su.id === mu.id)
+                );
+                if (missingOnServer.length > 0) {
+                  syncToServer('SYNC_ALL', { users: missingOnServer });
+                }
+
                 return merged;
               });
             }
@@ -563,15 +586,20 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
               }
 
-              if (server.users) {
+              const activeUser = currentUserRef.current;
+              const curUid = activeUser?.id;
+
+              if (server.users && Array.isArray(server.users)) {
                 setAllUsers((prev) => {
                   const map = new Map<string, User>();
                   prev.filter((u) => !DUMMY_IDS.has(u.id)).forEach((u) => map.set(u.id, u));
                   server.users.filter((u: User) => !DUMMY_IDS.has(u.id)).forEach((u: User) => map.set(u.id, u));
+                  if (activeUser && !DUMMY_IDS.has(activeUser.id)) {
+                    map.set(activeUser.id, activeUser);
+                  }
                   return Array.from(map.values());
                 });
               }
-              const curUid = currentUser?.id;
               const curLikedSet = new Set<string>();
               const curRepostedSet = new Set<string>();
               if (curUid) {
@@ -663,21 +691,19 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setActivities(server.activities);
                 safeLocalStorageSet(STORAGE_KEYS.ACTIVITIES, JSON.stringify(server.activities));
               }
-              if (server.follows && currentUser) {
-                const followers = server.follows[currentUser.id] || [];
+              if (server.follows && activeUser) {
+                const followers = server.follows[activeUser.id] || [];
                 setFollowersIds(followers);
-                safeLocalStorageSet(`velo_followers_${currentUser.id}`, JSON.stringify(followers));
+                safeLocalStorageSet(`velo_followers_${activeUser.id}`, JSON.stringify(followers));
 
                 const followings: string[] = [];
                 Object.entries(server.follows).forEach(([targetId, fList]) => {
-                  if (Array.isArray(fList) && fList.includes(currentUser.id)) {
+                  if (Array.isArray(fList) && fList.includes(activeUser.id)) {
                     followings.push(targetId);
                   }
                 });
-                if (followings.length > 0) {
-                  setFollowingIds(followings);
-                  safeLocalStorageSet(`velo_following_${currentUser.id}`, JSON.stringify(followings));
-                }
+                setFollowingIds(followings);
+                safeLocalStorageSet(`velo_following_${activeUser.id}`, JSON.stringify(followings));
               }
             }
           })
@@ -789,11 +815,10 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentUser(target);
       safeLocalStorageSet(STORAGE_KEYS.CURRENT_USER, JSON.stringify(target));
       try {
-        const isCustomUser = target.id !== 'usr_me';
         const storedFollowing = localStorage.getItem(`velo_following_${target.id}`);
-        setFollowingIds(storedFollowing ? JSON.parse(storedFollowing) : isCustomUser ? [] : ['usr_elena', 'usr_marcus']);
+        setFollowingIds(storedFollowing ? JSON.parse(storedFollowing) : []);
         const storedFollowers = localStorage.getItem(`velo_followers_${target.id}`);
-        setFollowersIds(storedFollowers ? JSON.parse(storedFollowers) : isCustomUser ? [] : ['usr_elena', 'usr_marcus']);
+        setFollowersIds(storedFollowers ? JSON.parse(storedFollowers) : []);
       } catch {}
       showToast(`Switched account to @${target.username}`, 'success');
     }
@@ -1247,31 +1272,22 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const toggleFollowUser = (userId: string) => {
     if (!currentUser) return;
     const isCurrentlyFollowing = followingIds.includes(userId);
-    const nextFollowing = isCurrentlyFollowing
-      ? followingIds.filter((id) => id !== userId)
-      : [...followingIds, userId];
+    const shouldFollow = !isCurrentlyFollowing;
+    const nextFollowing = shouldFollow
+      ? [...followingIds.filter((id) => id !== userId), userId]
+      : followingIds.filter((id) => id !== userId);
 
     setFollowingIds(nextFollowing);
     safeLocalStorageSet(`velo_following_${currentUser.id}`, JSON.stringify(nextFollowing));
 
-    // Trigger follow notification
-    if (!isCurrentlyFollowing && userId !== currentUser.id) {
-      const newAct: Activity = {
-        id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-        type: 'follow',
-        actor: currentUser,
-        recipientId: userId,
-        createdAt: new Date().toISOString(),
-        isRead: false,
-      };
-      setActivities((acts) => [newAct, ...acts]);
-      safeLocalStorageSet(STORAGE_KEYS.ACTIVITIES, JSON.stringify([newAct, ...activities]));
-    }
+    const targetUserObj = allUsers.find((u) => u.id === userId);
 
     syncToServer('TOGGLE_FOLLOW', {
       followerId: currentUser.id,
       followingId: userId,
       actor: currentUser,
+      targetUser: targetUserObj,
+      isFollow: shouldFollow,
     });
 
     const updatedCurrentUser: User = {
@@ -1284,13 +1300,10 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAllUsers((prev) =>
       prev.map((u) => {
         if (u.id === userId) {
-          const isFollowing = !isCurrentlyFollowing;
-          const isMutual = isFollowing && followersIds.includes(userId);
           return {
             ...u,
-            isFollowing,
-            isMutual,
-            followersCount: isFollowing ? u.followersCount + 1 : Math.max(0, u.followersCount - 1),
+            isFollowing: shouldFollow,
+            followersCount: shouldFollow ? u.followersCount + 1 : Math.max(0, u.followersCount - 1),
           };
         }
         if (u.id === currentUser.id) {
@@ -1300,7 +1313,7 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
 
-    showToast(isCurrentlyFollowing ? 'Unfollowed user' : 'Following creator', 'info');
+    showToast(shouldFollow ? 'Following creator' : 'Unfollowed user', 'info');
   };
 
   const blockUser = (userId: string) => {
@@ -1505,9 +1518,9 @@ export const VeloProvider: React.FC<{ children: React.ReactNode }> = ({ children
     showToast('Local application cache cleared', 'success');
   };
 
-  // User-scoped activities: show notifications received by currentUser as well as their own follow activity
+  // User-scoped activities: show notifications received by currentUser
   const activeUserActivities = activities.filter(
-    (a) => a.recipientId === currentUser?.id || a.actor.id === currentUser?.id
+    (a) => a.recipientId === currentUser?.id
   );
 
   // User-scoped conversations: only usr_me gets default demo chats; new accounts start with clean inbox (zero dummy unread badges)

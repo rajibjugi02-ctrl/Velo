@@ -37,7 +37,32 @@ export default function ActivityPage() {
   const interactionActivities = activities;
 
   // Tab 2: Follows & Connections - strictly genuine creators who follow the active user
-  const followersList = allUsers.filter((u) => (followersIds || []).includes(u.id));
+  const followersList = React.useMemo(() => {
+    const list: typeof allUsers = [];
+    const seen = new Set<string>();
+
+    // 1. From confirmed followersIds
+    (followersIds || []).forEach((fId) => {
+      const found = allUsers.find((u) => u.id === fId);
+      if (found && !seen.has(found.id)) {
+        seen.add(found.id);
+        list.push(found);
+      }
+    });
+
+    // 2. Guarantee inclusion of actors from incoming follow notifications
+    activities.forEach((act) => {
+      if (act.type === 'follow' && act.recipientId === currentUser?.id && act.actor) {
+        if (!seen.has(act.actor.id)) {
+          seen.add(act.actor.id);
+          const fromAll = allUsers.find((u) => u.id === act.actor.id);
+          list.push(fromAll || act.actor);
+        }
+      }
+    });
+
+    return list;
+  }, [allUsers, followersIds, activities, currentUser?.id]);
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -66,14 +91,8 @@ export default function ActivityPage() {
         return `commented: "${activity.commentText || ''}"`;
       case 'tag':
         return 'tagged you in a publication or story';
-      case 'follow': {
-        const isRecipient = activity.recipientId === currentUser?.id;
-        if (isRecipient) {
-          return 'started following you';
-        }
-        const target = allUsers.find((u) => u.id === activity.recipientId);
-        return `you started following @${target?.username || 'creator'}`;
-      }
+      case 'follow':
+        return 'started following you';
       default:
         return 'interacted with your content';
     }

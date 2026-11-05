@@ -297,22 +297,32 @@ export async function POST(req: Request) {
       }
 
       case 'TOGGLE_FOLLOW': {
-        const { followerId, followingId, actor } = payload;
+        const { followerId, followingId, actor, targetUser, isFollow } = payload;
         if (followerId && followingId) {
           if (!db.follows) db.follows = {};
           if (!db.follows[followingId]) db.follows[followingId] = [];
 
-          const isFollowing = db.follows[followingId].includes(followerId);
-          if (isFollowing) {
-            db.follows[followingId] = db.follows[followingId].filter((id) => id !== followerId);
-            if (db.activities) {
-              db.activities = db.activities.filter(
-                (a) => !(a.type === 'follow' && a.actor?.id === followerId && a.recipientId === followingId)
-              );
+          // Ensure both users exist in db.users for cross-device discovery
+          if (actor && actor.id) {
+            const aIdx = db.users.findIndex((u) => u.id === actor.id);
+            if (aIdx !== -1) db.users[aIdx] = { ...db.users[aIdx], ...actor };
+            else db.users.push(actor);
+          }
+          if (targetUser && targetUser.id) {
+            const tIdx = db.users.findIndex((u) => u.id === targetUser.id);
+            if (tIdx !== -1) db.users[tIdx] = { ...db.users[tIdx], ...targetUser };
+            else db.users.push(targetUser);
+          }
+
+          const currentlyFollowing = db.follows[followingId].includes(followerId);
+          const shouldFollow = typeof isFollow === 'boolean' ? isFollow : !currentlyFollowing;
+
+          if (shouldFollow) {
+            if (!db.follows[followingId].includes(followerId)) {
+              db.follows[followingId].push(followerId);
             }
-          } else {
-            db.follows[followingId].push(followerId);
-            if (actor) {
+            // Follow notification addressed specifically to the recipient (followingId)
+            if (actor && followingId !== followerId) {
               const newAct: Activity = {
                 id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
                 type: 'follow',
@@ -322,22 +332,34 @@ export async function POST(req: Request) {
                 isRead: false,
               };
               if (!db.activities) db.activities = [];
-              db.activities = [newAct, ...db.activities.filter((a) => a.id !== newAct.id)];
+              db.activities = [
+                newAct,
+                ...db.activities.filter(
+                  (a) => !(a.type === 'follow' && a.actor?.id === followerId && a.recipientId === followingId)
+                ),
+              ];
+            }
+          } else {
+            db.follows[followingId] = db.follows[followingId].filter((id) => id !== followerId);
+            if (db.activities) {
+              db.activities = db.activities.filter(
+                (a) => !(a.type === 'follow' && a.actor?.id === followerId && a.recipientId === followingId)
+              );
             }
           }
 
-          // Update user counts
-          const targetUser = db.users.find((u) => u.id === followingId);
-          if (targetUser) {
-            targetUser.followersCount = db.follows[followingId].length;
+          // Update follower & following counts
+          const tUser = db.users.find((u) => u.id === followingId);
+          if (tUser) {
+            tUser.followersCount = db.follows[followingId].length;
           }
-          const followerUser = db.users.find((u) => u.id === followerId);
-          if (followerUser) {
-            let followingCount = 0;
-            Object.values(db.follows).forEach((followers) => {
-              if (followers.includes(followerId)) followingCount++;
+          const fUser = db.users.find((u) => u.id === followerId);
+          if (fUser) {
+            let fCount = 0;
+            Object.values(db.follows).forEach((flist) => {
+              if (flist.includes(followerId)) fCount++;
             });
-            followerUser.followingCount = followingCount;
+            fUser.followingCount = fCount;
           }
         }
         break;
